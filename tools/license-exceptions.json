@@ -1,0 +1,8 @@
+{
+  "caniuse-lite": {
+    "reason": "Browser support database dependency of Next.js, licensed under CC-BY-4.0"
+  },
+  "@img/sharp-libvips-linux-x64": {
+    "reason": "Optional prebuilt binary for Next.js image optimization, licensed under LGPL-3.0-or-later"
+  }
+}
