@@ -9,7 +9,7 @@ Open: D-004 (merchant model), D-007 (identity).
 Task status:
 | Task | Status |
 |---|---|
-| P1-01 Monorepo skeleton | REJECTED — corrections R1–R8 requested (PR #1, review 2026-11-11) |
+| P1-01 Monorepo skeleton | ACCEPTED WITH LIMITATIONS (L1–L3) — awaiting Owner merge of PR #1 |
 | P1-02 CI | READY (after P1-01 merged) |
 | P1-03 DB foundation | READY (after P1-02 merged) |
 

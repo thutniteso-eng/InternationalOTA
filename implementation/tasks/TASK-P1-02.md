@@ -33,3 +33,6 @@ Branch `task/P1-02-ci`, PR `[P1-02] Continuous integration`, report `reports/TAS
 
 ## OWNER ACTION AFTER MERGE
 GitHub → Settings → Branches → add rule for `main`: require PR, require status checks `verify` and `security`, block force pushes.
+
+## ADDITIONAL ITEM (carried from P1-01 review, L2)
+In `.gitignore`, replace the repo-wide `AGENTS.md` entry with `apps/web/AGENTS.md`.

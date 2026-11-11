@@ -6,3 +6,4 @@
 - Owner approved D-001, D-002, D-003, D-005, D-006, D-008, D-009, D-010. Added Phase 1/2 task lists and mandatory failure scenarios to MASTER_ROADMAP; updated CURRENT_STATE, NEXT_ACTIONS.
 - Repo initialised on GitHub; added ENGINEERING_STANDARDS, README, .gitignore/.gitattributes, D-011..D-013, TASK specs P1-01..P1-03.
 - P1-01 PR #1 reviewed: REJECTED (fresh-clone lint/typecheck/test fail; Nest wiring untested). Corrections R1–R8 posted on PR.
+- P1-01 re-reviewed at d909571: ACCEPTED WITH LIMITATIONS (L1 api dev no watch, L2 AGENTS.md ignore → P1-02, L3 docker not independently verified).
