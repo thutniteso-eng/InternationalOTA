@@ -14,6 +14,22 @@ jobs:
   verify:
     name: verify
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_DB: ota_dev
+          POSTGRES_USER: ota_user
+          POSTGRES_PASSWORD: ota_password
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U ota_user -d ota_dev"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://ota_user:ota_password@localhost:55432/ota_dev
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -36,8 +52,14 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Check module boundaries
+        run: pnpm lint:boundaries
+
       - name: Typecheck
         run: pnpm typecheck
+
+      - name: Run database migrations
+        run: pnpm db:migrate
 
       - name: Run tests
         run: pnpm test
