@@ -10,7 +10,7 @@ Task status:
 | Task | Status |
 |---|---|
 | P1-01 Monorepo skeleton | DONE — merged (PR #1) with limitations L1, L3 |
-| P1-02 CI | REJECTED — corrections C1–C4 requested (PR #2) |
+| P1-02 CI | ACCEPTED — awaiting Owner merge of PR #2 + branch protection |
 | P1-03 DB foundation | READY (after P1-02 merged) |
 
 No application code exists yet.
