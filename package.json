@@ -10,9 +10,10 @@
     "build": "pnpm -r run build",
     "build:packages": "pnpm --filter \"./packages/**\" build",
     "format": "prettier --write .",
-    "format:check": "pnpm -r run format:check",
-    "lint": "pnpm build:packages && pnpm -r run lint",
-    "test": "pnpm build:packages && pnpm -r run test",
+    "format:check": "pnpm -r run format:check && prettier --check tools",
+    "licenses:check": "node tools/check-licenses.mjs",
+    "lint": "pnpm build:packages && pnpm -r run lint && eslint tools",
+    "test": "pnpm build:packages && pnpm -r run test && vitest run tools",
     "typecheck": "pnpm build:packages && pnpm -r run typecheck"
   },
   "devDependencies": {
