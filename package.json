@@ -9,14 +9,19 @@
   "scripts": {
     "build": "pnpm -r run build",
     "build:packages": "pnpm --filter \"./packages/**\" build",
+    "db:generate": "pnpm --filter @internationalota/db run db:generate",
+    "db:migrate": "pnpm --filter @internationalota/db run db:migrate",
+    "db:studio": "pnpm --filter @internationalota/db exec drizzle-kit studio",
     "format": "prettier --write .",
     "format:check": "pnpm -r run format:check && prettier --check tools",
     "licenses:check": "node tools/check-licenses.mjs",
     "lint": "pnpm build:packages && pnpm -r run lint && eslint tools",
+    "lint:boundaries": "depcruise apps/api/src --config .dependency-cruiser.cjs",
     "test": "pnpm build:packages && pnpm -r run test && vitest run tools",
     "typecheck": "pnpm build:packages && pnpm -r run typecheck"
   },
   "devDependencies": {
+    "dependency-cruiser": "^16.10.0",
     "eslint": "^9.20.0",
     "prettier": "^3.5.0",
     "typescript": "^5.7.3",
