@@ -8,7 +8,7 @@ describe('formatPlatformGreeting', () => {
       tagline: 'Vietnam-first independent travel platform',
     };
     expect(formatPlatformGreeting(info)).toBe(
-      'InternationalOTA — Vietnam-first independent travel platform',
+      'DELIBERATE CI FAILURE — Vietnam-first independent travel platform',
     );
   });
 });
