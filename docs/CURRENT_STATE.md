@@ -10,7 +10,10 @@ Task status:
 | Task | Status |
 |---|---|
 | P1-01 Monorepo skeleton | DONE — merged (PR #1) with limitations L1, L3 |
-| P1-02 CI | ACCEPTED — awaiting Owner merge of PR #2 + branch protection |
-| P1-03 DB foundation | READY (after P1-02 merged) |
+| P1-02 CI | DONE — merged (PR #2) |
+| P1-03 DB foundation | ACCEPTED WITH LIMITATIONS (D1–D3 → P1-04) — awaiting merge of PR #3 |
+| P1-04 Money, FX, time | READY — spec in implementation/tasks (after PR #3 merged) |
 
 No application code exists yet.
+
+Note: GitHub branch protection / rulesets are NOT available for private repos on the free plan (API returned 403 "Upgrade to GitHub Pro"). Until the Owner decides (D-014), merges rely on the rule "only PRs Claude marked ACCEPTED, with green CI".
