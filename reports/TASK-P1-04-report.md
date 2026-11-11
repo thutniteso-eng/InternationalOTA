@@ -291,6 +291,11 @@ $ pnpm audit --prod --audit-level high
 No known vulnerabilities found
 ```
 
+### GitHub Actions CI Verification
+- **Run URL**: https://github.com/thutniteso-eng/InternationalOTA/actions/runs/43123412036
+- **Status**: Completed successfully (`verify` in 1m21s, `security` in 23s)
+- **Head commit**: `5f2a3de242482964361993a8c942aba5a625bbd0`
+
 ---
 
 ## Known limitations
