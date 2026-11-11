@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -16,48 +16,201 @@ export const ALLOWED_LICENSES = new Set([
   'Python-2.0',
 ]);
 
-export function isLicenseAllowed(licenseString, allowedSet = ALLOWED_LICENSES) {
+export const ALLOWED_WITH_PAIRS = new Set([
+  // Explicitly approved <base> WITH <exception> combinations
+]);
+
+function tokenize(input) {
+  const tokens = [];
+  let i = 0;
+  while (i < input.length) {
+    const ch = input[i];
+    if (/\s/.test(ch)) {
+      i++;
+      continue;
+    }
+    if (ch === '(') {
+      tokens.push({ type: 'LPAREN', value: '(' });
+      i++;
+    } else if (ch === ')') {
+      tokens.push({ type: 'RPAREN', value: ')' });
+      i++;
+    } else {
+      const start = i;
+      while (i < input.length && !/\s/.test(input[i]) && input[i] !== '(' && input[i] !== ')') {
+        i++;
+      }
+      const word = input.slice(start, i);
+      if (word === 'OR') {
+        tokens.push({ type: 'OR', value: 'OR' });
+      } else if (word === 'AND') {
+        tokens.push({ type: 'AND', value: 'AND' });
+      } else if (word === 'WITH') {
+        tokens.push({ type: 'WITH', value: 'WITH' });
+      } else if (/^[A-Za-z0-9_.\-+:]+$/.test(word)) {
+        tokens.push({ type: 'IDENT', value: word });
+      } else {
+        return null;
+      }
+    }
+  }
+  tokens.push({ type: 'EOF', value: '' });
+  return tokens;
+}
+
+export function isWithAllowed(
+  base,
+  exception,
+  allowedSet = ALLOWED_LICENSES,
+  allowedWithPairs = ALLOWED_WITH_PAIRS,
+) {
+  if (!allowedSet.has(base)) {
+    return false;
+  }
+  const pair = `${base} WITH ${exception}`;
+  return allowedWithPairs.has(pair);
+}
+
+export function isLicenseAllowed(
+  licenseString,
+  allowedSet = ALLOWED_LICENSES,
+  allowedWithPairs = ALLOWED_WITH_PAIRS,
+) {
   if (!licenseString || typeof licenseString !== 'string') {
     return false;
   }
-  const trimmed = licenseString.trim();
-  if (allowedSet.has(trimmed)) {
-    return true;
+
+  const tokens = tokenize(licenseString.trim());
+  if (!tokens) {
+    return false;
   }
 
-  // Handle OR expressions: allowed if at least one choice is allowed
-  if (trimmed.includes(' OR ')) {
-    const parts = trimmed
-      .replace(/[()]/g, '')
-      .split(/\s+OR\s+/)
-      .map((p) => p.trim());
-    return parts.some((p) => isLicenseAllowed(p, allowedSet));
+  let pos = 0;
+
+  function peek() {
+    return tokens[pos];
   }
 
-  // Handle AND expressions: allowed only if all parts are allowed
-  if (trimmed.includes(' AND ')) {
-    const parts = trimmed
-      .replace(/[()]/g, '')
-      .split(/\s+AND\s+/)
-      .map((p) => p.trim());
-    return parts.every((p) => isLicenseAllowed(p, allowedSet));
+  function consume(expectedType) {
+    const token = tokens[pos];
+    if (!token || (expectedType && token.type !== expectedType)) {
+      throw new Error(`Expected ${expectedType || 'token'}, got ${token ? token.type : 'EOF'}`);
+    }
+    pos++;
+    return token;
   }
 
-  // Strip enclosing parentheses e.g. "(MIT)"
-  const unparenthesized = trimmed.replace(/^\((.*)\)$/, '$1').trim();
-  if (unparenthesized !== trimmed) {
-    return isLicenseAllowed(unparenthesized, allowedSet);
+  function parseFactor() {
+    const token = peek();
+    if (!token) {
+      throw new Error('Unexpected end of input');
+    }
+    if (token.type === 'LPAREN') {
+      consume('LPAREN');
+      const val = parseOr();
+      consume('RPAREN');
+      return val;
+    }
+    if (token.type === 'IDENT') {
+      const base = consume('IDENT').value;
+      if (peek().type === 'WITH') {
+        consume('WITH');
+        const exc = consume('IDENT').value;
+        return isWithAllowed(base, exc, allowedSet, allowedWithPairs);
+      }
+      return allowedSet.has(base);
+    }
+    throw new Error(`Unexpected token: ${token.type}`);
   }
 
-  return false;
+  function parseAnd() {
+    let result = parseFactor();
+    while (peek().type === 'AND') {
+      consume('AND');
+      const right = parseFactor();
+      result = result && right;
+    }
+    return result;
+  }
+
+  function parseOr() {
+    let result = parseAnd();
+    while (peek().type === 'OR') {
+      consume('OR');
+      const right = parseAnd();
+      result = result || right;
+    }
+    return result;
+  }
+
+  try {
+    const result = parseOr();
+    if (peek().type !== 'EOF') {
+      return false;
+    }
+    return result;
+  } catch {
+    return false;
+  }
 }
 
-export function checkLicenses(licensesData, exceptions = {}, allowedSet = ALLOWED_LICENSES) {
+export function loadExceptions(exceptionsPath) {
+  if (!existsSync(exceptionsPath)) {
+    return {};
+  }
+
+  let raw;
+  try {
+    raw = readFileSync(exceptionsPath, 'utf8');
+  } catch (err) {
+    throw new Error(`Failed to read exceptions file at "${exceptionsPath}": ${err.message}`);
+  }
+
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(`Invalid JSON in license exceptions file "${exceptionsPath}": ${err.message}`);
+  }
+
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+    throw new Error(
+      `License exceptions file "${exceptionsPath}" must contain a JSON object mapping package names to exception definitions.`,
+    );
+  }
+
+  for (const [pkgName, entry] of Object.entries(data)) {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+      throw new Error(
+        `Invalid exception entry for "${pkgName}" in "${exceptionsPath}": entry must be an object.`,
+      );
+    }
+    if (typeof entry.license !== 'string' || entry.license.trim().length === 0) {
+      throw new Error(
+        `Invalid exception entry for "${pkgName}" in "${exceptionsPath}": missing or empty "license" field.`,
+      );
+    }
+    if (typeof entry.reason !== 'string' || entry.reason.trim().length === 0) {
+      throw new Error(
+        `Invalid exception entry for "${pkgName}" in "${exceptionsPath}": missing or empty "reason" field.`,
+      );
+    }
+  }
+
+  return data;
+}
+
+export function checkLicenses(
+  licensesData,
+  exceptions = {},
+  allowedSet = ALLOWED_LICENSES,
+  allowedWithPairs = ALLOWED_WITH_PAIRS,
+) {
   const violations = [];
   let totalPackages = 0;
 
   for (const [license, packages] of Object.entries(licensesData)) {
-    const allowed = isLicenseAllowed(license, allowedSet);
+    const allowed = isLicenseAllowed(license, allowedSet, allowedWithPairs);
 
     for (const pkg of packages) {
       totalPackages++;
@@ -68,9 +221,14 @@ export function checkLicenses(licensesData, exceptions = {}, allowedSet = ALLOWE
         continue;
       }
 
-      // Check if package is an approved exception with a valid reason field
+      // Check if package is an approved exception matching observed license with valid reason
       const exception = exceptions[name];
-      if (exception && typeof exception.reason === 'string' && exception.reason.trim().length > 0) {
+      if (
+        exception &&
+        exception.license === license &&
+        typeof exception.reason === 'string' &&
+        exception.reason.trim().length > 0
+      ) {
         continue;
       }
 
@@ -93,10 +251,10 @@ export function run(options = {}) {
   const exceptionsPath = options.exceptionsPath || resolve('tools/license-exceptions.json');
   let exceptions = {};
   try {
-    const raw = readFileSync(exceptionsPath, 'utf8');
-    exceptions = JSON.parse(raw);
-  } catch {
-    exceptions = {};
+    exceptions = loadExceptions(exceptionsPath);
+  } catch (err) {
+    console.error(`\n❌ Error loading license exceptions: ${err.message}\n`);
+    return false;
   }
 
   let licensesData = options.licensesData;
@@ -116,7 +274,7 @@ export function run(options = {}) {
       console.error(`  - ${v.name} (${v.versions}): ${v.license}`);
     }
     console.error(
-      '\nIf an exception is required, add an entry with a "reason" field in tools/license-exceptions.json\n',
+      '\nIf an exception is required, add an entry with "license" and "reason" fields in tools/license-exceptions.json\n',
     );
     return false;
   }
