@@ -16,3 +16,4 @@ Status: PROPOSED → APPROVED / REJECTED by Project Owner. Full ADR text goes in
 | D-011 | ORM & migrations | Drizzle ORM + drizzle-kit, SQL migrations committed, **forward-only** (rollback = new migration + tested backup restore). Reason: SQL-first, native row locks (`.for('update')`), light runtime; Prisma needs raw SQL for locking | ACCEPTED (Claude, technical) 2026-11-11 |
 | D-012 | Job queue | pg-boss on PostgreSQL: enqueue in the same transaction as business writes (outbox), no Redis needed for correctness. BullMQ rejected for now (Redis becomes a correctness dependency) | ACCEPTED (Claude, technical) 2026-11-11 |
 | D-013 | Runtime | Node.js 24 LTS, pnpm 10, Vitest, PostgreSQL 17 + PostGIS | ACCEPTED (Claude, technical) 2026-11-11 |
+| D-014 | Enforce CI on `main` | GitHub Pro (~USD 4/month) to enable branch protection on the private repo, vs. manual discipline | OPEN (Owner) |
