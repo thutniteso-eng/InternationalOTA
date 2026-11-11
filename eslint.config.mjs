@@ -21,7 +21,6 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/coverage/**',
       'eslint.config.mjs',
-      'vitest.workspace.ts',
       '**/vitest.config.ts',
       '**/next.config.mjs',
     ],
