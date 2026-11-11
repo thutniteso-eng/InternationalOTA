@@ -32,7 +32,7 @@
     "db:migrate": "node dist/migrate.js"
   },
   "dependencies": {
-    "drizzle-orm": "^0.40.0",
+    "drizzle-orm": "^0.45.4",
     "pg": "^8.13.3",
     "uuidv7": "^1.0.2"
   },
