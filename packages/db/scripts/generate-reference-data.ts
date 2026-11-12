@@ -52,6 +52,25 @@ interface CurrencyRawItem {
   currency: string;
 }
 
+// ISO 4217 specifies minor units as "N.A." for precious metals, bond market units,
+// supranational funds, and testing/no-currency codes. In the database and JSON,
+// these must be recorded as NULL (not 0).
+const ISO_4217_NA_MINOR_UNITS = new Set([
+  'XAG',
+  'XAU',
+  'XBA',
+  'XBB',
+  'XBC',
+  'XBD',
+  'XDR',
+  'XPD',
+  'XPT',
+  'XSU',
+  'XTS',
+  'XUA',
+  'XXX',
+]);
+
 const currencyList: Array<{
   code: string;
   numeric: string | null;
@@ -67,7 +86,11 @@ for (const item of cc.data as CurrencyRawItem[]) {
   }
   seenCurrencies.add(item.code);
 
-  const minorUnits = typeof item.digits === 'number' ? item.digits : null;
+  const minorUnits = ISO_4217_NA_MINOR_UNITS.has(item.code)
+    ? null
+    : typeof item.digits === 'number'
+      ? item.digits
+      : null;
   const numeric = item.number ? String(item.number).padStart(3, '0') : null;
   const enabledForSale = SALE_ENABLED_CURRENCIES.has(item.code);
 

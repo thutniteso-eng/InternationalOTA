@@ -1115,42 +1115,42 @@
   {
     "code": "XAG",
     "numeric": "961",
-    "minorUnits": 0,
+    "minorUnits": null,
     "nameEn": "Silver",
     "enabledForSale": false
   },
   {
     "code": "XAU",
     "numeric": "959",
-    "minorUnits": 0,
+    "minorUnits": null,
     "nameEn": "Gold",
     "enabledForSale": false
   },
   {
     "code": "XBA",
     "numeric": "955",
-    "minorUnits": 0,
+    "minorUnits": null,
     "nameEn": "Bond Markets Unit European Composite Unit (EURCO)",
     "enabledForSale": false
   },
   {
     "code": "XBB",
     "numeric": "956",
-    "minorUnits": 0,
+    "minorUnits": null,
     "nameEn": "Bond Markets Unit European Monetary Unit (E.M.U.-6)",
     "enabledForSale": false
   },
   {
     "code": "XBC",
     "numeric": "957",
-    "minorUnits": 0,
+    "minorUnits": null,
     "nameEn": "Bond Markets Unit European Unit of Account 9 (E.U.A.-9)",
     "enabledForSale": false
   },
   {
     "code": "XBD",
     "numeric": "958",
-    "minorUnits": 0,
+    "minorUnits": null,
     "nameEn": "Bond Markets Unit European Unit of Account 17 (E.U.A.-17)",
     "enabledForSale": false
   },
@@ -1164,7 +1164,7 @@
   {
     "code": "XDR",
     "numeric": "960",
-    "minorUnits": 0,
+    "minorUnits": null,
     "nameEn": "SDR (Special Drawing Right)",
     "enabledForSale": false
   },
@@ -1178,7 +1178,7 @@
   {
     "code": "XPD",
     "numeric": "964",
-    "minorUnits": 0,
+    "minorUnits": null,
     "nameEn": "Palladium",
     "enabledForSale": false
   },
@@ -1192,35 +1192,35 @@
   {
     "code": "XPT",
     "numeric": "962",
-    "minorUnits": 0,
+    "minorUnits": null,
     "nameEn": "Platinum",
     "enabledForSale": false
   },
   {
     "code": "XSU",
     "numeric": "994",
-    "minorUnits": 0,
+    "minorUnits": null,
     "nameEn": "Sucre",
     "enabledForSale": false
   },
   {
     "code": "XTS",
     "numeric": "963",
-    "minorUnits": 0,
+    "minorUnits": null,
     "nameEn": "Codes specifically reserved for testing purposes",
     "enabledForSale": false
   },
   {
     "code": "XUA",
     "numeric": "965",
-    "minorUnits": 0,
+    "minorUnits": null,
     "nameEn": "ADB Unit of Account",
     "enabledForSale": false
   },
   {
     "code": "XXX",
     "numeric": "999",
-    "minorUnits": 0,
+    "minorUnits": null,
     "nameEn": "The codes assigned for transactions where no currency is involved",
     "enabledForSale": false
   },

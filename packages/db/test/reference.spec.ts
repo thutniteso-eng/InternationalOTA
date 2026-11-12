@@ -1,9 +1,12 @@
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { SUPPORTED_CURRENCIES, type CurrencyCode } from '@internationalota/money';
 import { isValidTimeZone, startOfLocalDayUtc } from '@internationalota/time';
-import { eq, sql } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { countries, currencies, languages, timeZones } from '../src/schema/reference.ts';
-import { seedReferenceData } from '../src/seed.ts';
+import { getReferenceDataFolder, seedReferenceData } from '../src/seed.ts';
 import { createTestDatabase, type TestDbInstance } from './test-db.ts';
 
 describe('Reference data schema and seed integration tests', () => {
@@ -125,6 +128,44 @@ describe('Reference data schema and seed integration tests', () => {
       expect(utc[0]?.name).toBe('UTC');
       expect(utc[0]?.countryAlpha2).toBeNull();
     });
+
+    it('records ISO 4217 "N.A." minor units as NULL for non-currency and bond codes (F3)', async () => {
+      const naCodes = [
+        'XAG',
+        'XAU',
+        'XBA',
+        'XBB',
+        'XBC',
+        'XBD',
+        'XDR',
+        'XPD',
+        'XPT',
+        'XSU',
+        'XTS',
+        'XUA',
+        'XXX',
+      ];
+      const naRows = await testDb.db
+        .select()
+        .from(currencies)
+        .where(inArray(currencies.code, naCodes));
+
+      expect(naRows).toHaveLength(naCodes.length);
+      for (const row of naRows) {
+        expect(row.minorUnits).toBeNull();
+      }
+
+      // Circulating fiat currencies with 0 minor units must remain 0
+      const zeroCodes = ['XAF', 'XOF', 'XPF'];
+      const zeroRows = await testDb.db
+        .select()
+        .from(currencies)
+        .where(inArray(currencies.code, zeroCodes));
+      expect(zeroRows).toHaveLength(3);
+      for (const row of zeroRows) {
+        expect(row.minorUnits).toBe(0);
+      }
+    });
   });
 
   describe('Seed idempotency', () => {
@@ -196,6 +237,87 @@ describe('Reference data schema and seed integration tests', () => {
       expect(currencyAfter[0]?.updatedAt.getTime()).toBe(vndCurrencyUpdatedAt?.getTime());
       expect(languageAfter[0]?.updatedAt.getTime()).toBe(viLanguageUpdatedAt?.getTime());
       expect(timeZoneAfter[0]?.updatedAt.getTime()).toBe(hcmTimeZoneUpdatedAt?.getTime());
+    });
+
+    it('upserts updated rows and advances updated_at while preserving unchanged rows and retained rows (F1)', async () => {
+      // 1. Capture initial KWD and USD records
+      const [kwdBefore] = await testDb.db
+        .select()
+        .from(currencies)
+        .where(eq(currencies.code, 'KWD'));
+      const [usdBefore] = await testDb.db
+        .select()
+        .from(currencies)
+        .where(eq(currencies.code, 'USD'));
+
+      expect(kwdBefore?.enabledForSale).toBe(false);
+      expect(kwdBefore?.nameEn).toBe('Kuwaiti Dinar');
+      expect(usdBefore?.enabledForSale).toBe(true);
+
+      // 2. Create temporary folder containing modified reference JSON data
+      const tempDir = mkdtempSync(join(tmpdir(), 'ota-ref-upsert-test-'));
+      try {
+        const canonicalDir = getReferenceDataFolder();
+        // Copy countries, languages, time-zones unchanged
+        copyFileSync(join(canonicalDir, 'countries.json'), join(tempDir, 'countries.json'));
+        copyFileSync(join(canonicalDir, 'languages.json'), join(tempDir, 'languages.json'));
+        copyFileSync(join(canonicalDir, 'time-zones.json'), join(tempDir, 'time-zones.json'));
+
+        // Load currencies.json, modify KWD, and omit ZWL
+        const currs = JSON.parse(
+          readFileSync(join(canonicalDir, 'currencies.json'), 'utf8'),
+        ) as Array<{
+          code: string;
+          numeric: string | null;
+          minorUnits: number | null;
+          nameEn: string;
+          enabledForSale: boolean;
+        }>;
+
+        const kwdItem = currs.find((c) => c.code === 'KWD');
+        expect(kwdItem).toBeDefined();
+        if (kwdItem) {
+          kwdItem.nameEn = 'Kuwaiti Dinar (Modified)';
+          kwdItem.enabledForSale = true;
+        }
+
+        // Omit ZWG from the seed file to verify omitted rows are not deleted
+        const filteredCurrs = currs.filter((c) => c.code !== 'ZWG');
+        writeFileSync(join(tempDir, 'currencies.json'), JSON.stringify(filteredCurrs, null, 2));
+
+        // Delay to ensure timestamp increment is detectable
+        await new Promise((r) => setTimeout(r, 100));
+
+        // 3. Re-run seed with modified dataset
+        await seedReferenceData(testDb.db, tempDir);
+
+        // 4. Verify KWD was updated and updated_at was advanced
+        const [kwdAfter] = await testDb.db
+          .select()
+          .from(currencies)
+          .where(eq(currencies.code, 'KWD'));
+        expect(kwdAfter?.nameEn).toBe('Kuwaiti Dinar (Modified)');
+        expect(kwdAfter?.enabledForSale).toBe(true);
+        expect(kwdAfter?.updatedAt.getTime()).toBeGreaterThan(kwdBefore?.updatedAt.getTime() ?? 0);
+
+        // 5. Verify USD was NOT updated and updated_at remains identical
+        const [usdAfter] = await testDb.db
+          .select()
+          .from(currencies)
+          .where(eq(currencies.code, 'USD'));
+        expect(usdAfter?.nameEn).toBe(usdBefore?.nameEn);
+        expect(usdAfter?.enabledForSale).toBe(usdBefore?.enabledForSale);
+        expect(usdAfter?.updatedAt.getTime()).toBe(usdBefore?.updatedAt.getTime());
+
+        // 6. Verify row omitted from JSON (ZWG) was NOT deleted
+        const [zwg] = await testDb.db.select().from(currencies).where(eq(currencies.code, 'ZWG'));
+        expect(zwg).toBeDefined();
+        expect(zwg?.code).toBe('ZWG');
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+        // Restore canonical seed state
+        await seedReferenceData(testDb.db);
+      }
     });
   });
 

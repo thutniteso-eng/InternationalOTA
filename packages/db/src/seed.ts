@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { sql } from 'drizzle-orm';
 import { createDbClient, type DatabaseClient } from './client.ts';
 import { countries, currencies, languages, timeZones } from './schema/reference.ts';
 
@@ -45,6 +46,15 @@ interface TimeZoneJson {
   countryAlpha2: string | null;
 }
 
+/**
+ * Seeds reference data into the database from JSON files.
+ *
+ * Implements an atomic upsert inside a single transaction (F1, F2):
+ * - Existing rows whose values have changed are updated, and their updated_at timestamp is set to now().
+ * - Existing rows whose values are identical are not updated (via IS DISTINCT FROM), preserving their original updated_at.
+ * - New rows are inserted.
+ * - Rows removed from the JSON files are NOT deleted from the database.
+ */
 export async function seedReferenceData(
   db: DatabaseClient,
   dataFolder = getReferenceDataFolder(),
@@ -62,38 +72,86 @@ export async function seedReferenceData(
     readFileSync(resolve(dataFolder, 'time-zones.json'), 'utf8'),
   ) as TimeZoneJson[];
 
-  // Execute in order respecting foreign keys:
-  // 1. Countries
-  if (countriesData.length > 0) {
-    await db.insert(countries).values(countriesData).onConflictDoNothing();
-  }
-
-  // 2. Currencies
-  if (currenciesData.length > 0) {
-    await db.insert(currencies).values(currenciesData).onConflictDoNothing();
-  }
-
-  // 3. Languages
-  if (languagesData.length > 0) {
-    await db.insert(languages).values(languagesData).onConflictDoNothing();
-  }
-
-  // 4. Time zones (foreign key to countries)
-  if (timeZonesData.length > 0) {
-    // Insert in chunks of 200 if needed for parameter safety
-    const chunkSize = 200;
-    for (let i = 0; i < timeZonesData.length; i += chunkSize) {
-      const chunk = timeZonesData.slice(i, i + chunkSize);
-      await db.insert(timeZones).values(chunk).onConflictDoNothing();
+  return await db.transaction(async (tx) => {
+    // 1. Countries
+    if (countriesData.length > 0) {
+      await tx
+        .insert(countries)
+        .values(countriesData)
+        .onConflictDoUpdate({
+          target: countries.alpha2,
+          set: {
+            alpha3: sql`excluded.alpha3`,
+            numeric: sql`excluded.numeric`,
+            nameEn: sql`excluded.name_en`,
+            updatedAt: sql`now()`,
+          },
+          setWhere: sql`(${countries.alpha3}, ${countries.numeric}, ${countries.nameEn}) IS DISTINCT FROM (excluded.alpha3, excluded.numeric, excluded.name_en)`,
+        });
     }
-  }
 
-  return {
-    countries: countriesData.length,
-    currencies: currenciesData.length,
-    languages: languagesData.length,
-    timeZones: timeZonesData.length,
-  };
+    // 2. Currencies
+    if (currenciesData.length > 0) {
+      await tx
+        .insert(currencies)
+        .values(currenciesData)
+        .onConflictDoUpdate({
+          target: currencies.code,
+          set: {
+            numeric: sql`excluded.numeric`,
+            minorUnits: sql`excluded.minor_units`,
+            nameEn: sql`excluded.name_en`,
+            enabledForSale: sql`excluded.enabled_for_sale`,
+            updatedAt: sql`now()`,
+          },
+          setWhere: sql`(${currencies.numeric}, ${currencies.minorUnits}, ${currencies.nameEn}, ${currencies.enabledForSale}) IS DISTINCT FROM (excluded.numeric, excluded.minor_units, excluded.name_en, excluded.enabled_for_sale)`,
+        });
+    }
+
+    // 3. Languages
+    if (languagesData.length > 0) {
+      await tx
+        .insert(languages)
+        .values(languagesData)
+        .onConflictDoUpdate({
+          target: languages.tag,
+          set: {
+            nameEn: sql`excluded.name_en`,
+            nameNative: sql`excluded.name_native`,
+            enabled: sql`excluded.enabled`,
+            updatedAt: sql`now()`,
+          },
+          setWhere: sql`(${languages.nameEn}, ${languages.nameNative}, ${languages.enabled}) IS DISTINCT FROM (excluded.name_en, excluded.name_native, excluded.enabled)`,
+        });
+    }
+
+    // 4. Time zones (foreign key to countries)
+    if (timeZonesData.length > 0) {
+      // Insert in chunks of 200 for parameter safety
+      const chunkSize = 200;
+      for (let i = 0; i < timeZonesData.length; i += chunkSize) {
+        const chunk = timeZonesData.slice(i, i + chunkSize);
+        await tx
+          .insert(timeZones)
+          .values(chunk)
+          .onConflictDoUpdate({
+            target: timeZones.name,
+            set: {
+              countryAlpha2: sql`excluded.country_alpha2`,
+              updatedAt: sql`now()`,
+            },
+            setWhere: sql`${timeZones.countryAlpha2} IS DISTINCT FROM excluded.country_alpha2`,
+          });
+      }
+    }
+
+    return {
+      countries: countriesData.length,
+      currencies: currenciesData.length,
+      languages: languagesData.length,
+      timeZones: timeZonesData.length,
+    };
+  });
 }
 
 export async function runSeedCli(): Promise<void> {
