@@ -240,6 +240,15 @@ describe('packages/money - Unit Tests', () => {
       const m35 = money(35n, 'USD');
       expect(applyRate(m35, tenPercent, RoundingMode.HALF_EVEN).amountMinor).toBe(4n);
     });
+
+    it('allows zero and negative rates in applyRate (e.g. for discounts/deductions)', () => {
+      const m = money(1000n, 'USD');
+      const zeroRate = decimal('0');
+      const discountRate = decimal('-0.20');
+
+      expect(applyRate(m, zeroRate, RoundingMode.HALF_UP).amountMinor).toBe(0n);
+      expect(applyRate(m, discountRate, RoundingMode.HALF_UP).amountMinor).toBe(-200n);
+    });
   });
 
   describe('parseMoney and formatMoneyPlain', () => {
@@ -275,6 +284,11 @@ describe('packages/money - Unit Tests', () => {
   });
 
   describe('FX conversion', () => {
+    const validSnapshotOptions = {
+      source: 'test-ecb',
+      asOf: '2026-11-12T00:00:00Z',
+    };
+
     it('returns input unchanged with rate 1 when same currency', () => {
       const m = money(1234n, 'USD');
       const res = convert(m, decimal('1.0'), 'USD', RoundingMode.HALF_UP);
@@ -291,10 +305,12 @@ describe('packages/money - Unit Tests', () => {
       // 100 minor USD = 1 major USD -> 25,400 major VND = 25,400 minor VND
       const usd = money(100n, 'USD');
       const rate = decimal('25400');
-      const res = convert(usd, rate, 'VND', RoundingMode.HALF_UP);
+      const res = convert(usd, rate, 'VND', RoundingMode.HALF_UP, validSnapshotOptions);
       expect(res.converted.amountMinor).toBe(25400n);
       expect(res.converted.currency).toBe('VND');
       expect(res.snapshot.rate).toBe('25400');
+      expect(res.snapshot.source).toBe('test-ecb');
+      expect(res.snapshot.asOf).toBe('2026-11-12T00:00:00Z');
     });
 
     it('converts VND to USD at rate 0.00004', () => {
@@ -302,9 +318,57 @@ describe('packages/money - Unit Tests', () => {
       // 25,000 VND * 0.00004 = 1.00 USD = 100 cents
       const vnd = money(25000n, 'VND');
       const rate = decimal('0.00004');
-      const res = convert(vnd, rate, 'USD', RoundingMode.HALF_UP);
+      const res = convert(vnd, rate, 'USD', RoundingMode.HALF_UP, validSnapshotOptions);
       expect(res.converted.amountMinor).toBe(100n);
       expect(res.converted.currency).toBe('USD');
+    });
+
+    it('rejects cross-currency conversion with rate <= 0 (E1)', () => {
+      const usd = money(100n, 'USD');
+      expect(() =>
+        convert(usd, decimal('0'), 'VND', RoundingMode.HALF_UP, validSnapshotOptions),
+      ).toThrow(InvalidRateError);
+      expect(() =>
+        convert(usd, decimal('-1.5'), 'VND', RoundingMode.HALF_UP, validSnapshotOptions),
+      ).toThrow(InvalidRateError);
+    });
+
+    it('rejects cross-currency conversion with missing or invalid source/asOf (E2)', () => {
+      const usd = money(100n, 'USD');
+      const rate = decimal('25400');
+
+      // Missing options
+      expect(() => convert(usd, rate, 'VND', RoundingMode.HALF_UP)).toThrow(InvalidRateError);
+
+      // Missing or empty source
+      expect(() =>
+        convert(usd, rate, 'VND', RoundingMode.HALF_UP, {
+          source: '',
+          asOf: '2026-11-12T00:00:00Z',
+        }),
+      ).toThrow(InvalidRateError);
+
+      // Missing or invalid asOf
+      expect(() =>
+        convert(usd, rate, 'VND', RoundingMode.HALF_UP, {
+          source: 'ecb',
+          asOf: '',
+        }),
+      ).toThrow(InvalidRateError);
+
+      expect(() =>
+        convert(usd, rate, 'VND', RoundingMode.HALF_UP, {
+          source: 'ecb',
+          asOf: 'not-an-iso-utc-string',
+        }),
+      ).toThrow(InvalidRateError);
+
+      expect(() =>
+        convert(usd, rate, 'VND', RoundingMode.HALF_UP, {
+          source: 'ecb',
+          asOf: '2026-11-12T00:00:00+07:00', // not UTC (must end in Z)
+        }),
+      ).toThrow(InvalidRateError);
     });
   });
 

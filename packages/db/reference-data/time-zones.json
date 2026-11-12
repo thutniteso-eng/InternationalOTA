@@ -1,0 +1,1678 @@
+[
+  {
+    "name": "Africa/Abidjan",
+    "countryAlpha2": "CI"
+  },
+  {
+    "name": "Africa/Accra",
+    "countryAlpha2": "GH"
+  },
+  {
+    "name": "Africa/Addis_Ababa",
+    "countryAlpha2": "ET"
+  },
+  {
+    "name": "Africa/Algiers",
+    "countryAlpha2": "DZ"
+  },
+  {
+    "name": "Africa/Asmara",
+    "countryAlpha2": "ER"
+  },
+  {
+    "name": "Africa/Bamako",
+    "countryAlpha2": "ML"
+  },
+  {
+    "name": "Africa/Bangui",
+    "countryAlpha2": "CF"
+  },
+  {
+    "name": "Africa/Banjul",
+    "countryAlpha2": "GM"
+  },
+  {
+    "name": "Africa/Bissau",
+    "countryAlpha2": "GW"
+  },
+  {
+    "name": "Africa/Blantyre",
+    "countryAlpha2": "MW"
+  },
+  {
+    "name": "Africa/Brazzaville",
+    "countryAlpha2": "CG"
+  },
+  {
+    "name": "Africa/Bujumbura",
+    "countryAlpha2": "BI"
+  },
+  {
+    "name": "Africa/Cairo",
+    "countryAlpha2": "EG"
+  },
+  {
+    "name": "Africa/Casablanca",
+    "countryAlpha2": "MA"
+  },
+  {
+    "name": "Africa/Ceuta",
+    "countryAlpha2": "ES"
+  },
+  {
+    "name": "Africa/Conakry",
+    "countryAlpha2": "GN"
+  },
+  {
+    "name": "Africa/Dakar",
+    "countryAlpha2": "SN"
+  },
+  {
+    "name": "Africa/Dar_es_Salaam",
+    "countryAlpha2": "TZ"
+  },
+  {
+    "name": "Africa/Djibouti",
+    "countryAlpha2": "DJ"
+  },
+  {
+    "name": "Africa/Douala",
+    "countryAlpha2": "CM"
+  },
+  {
+    "name": "Africa/El_Aaiun",
+    "countryAlpha2": "EH"
+  },
+  {
+    "name": "Africa/Freetown",
+    "countryAlpha2": "SL"
+  },
+  {
+    "name": "Africa/Gaborone",
+    "countryAlpha2": "BW"
+  },
+  {
+    "name": "Africa/Harare",
+    "countryAlpha2": "ZW"
+  },
+  {
+    "name": "Africa/Johannesburg",
+    "countryAlpha2": "ZA"
+  },
+  {
+    "name": "Africa/Juba",
+    "countryAlpha2": "SS"
+  },
+  {
+    "name": "Africa/Kampala",
+    "countryAlpha2": "UG"
+  },
+  {
+    "name": "Africa/Khartoum",
+    "countryAlpha2": "SD"
+  },
+  {
+    "name": "Africa/Kigali",
+    "countryAlpha2": "RW"
+  },
+  {
+    "name": "Africa/Kinshasa",
+    "countryAlpha2": "CD"
+  },
+  {
+    "name": "Africa/Lagos",
+    "countryAlpha2": "NG"
+  },
+  {
+    "name": "Africa/Libreville",
+    "countryAlpha2": "GA"
+  },
+  {
+    "name": "Africa/Lome",
+    "countryAlpha2": "TG"
+  },
+  {
+    "name": "Africa/Luanda",
+    "countryAlpha2": "AO"
+  },
+  {
+    "name": "Africa/Lubumbashi",
+    "countryAlpha2": "CD"
+  },
+  {
+    "name": "Africa/Lusaka",
+    "countryAlpha2": "ZM"
+  },
+  {
+    "name": "Africa/Malabo",
+    "countryAlpha2": "GQ"
+  },
+  {
+    "name": "Africa/Maputo",
+    "countryAlpha2": "MZ"
+  },
+  {
+    "name": "Africa/Maseru",
+    "countryAlpha2": "LS"
+  },
+  {
+    "name": "Africa/Mbabane",
+    "countryAlpha2": "SZ"
+  },
+  {
+    "name": "Africa/Mogadishu",
+    "countryAlpha2": "SO"
+  },
+  {
+    "name": "Africa/Monrovia",
+    "countryAlpha2": "LR"
+  },
+  {
+    "name": "Africa/Nairobi",
+    "countryAlpha2": "KE"
+  },
+  {
+    "name": "Africa/Ndjamena",
+    "countryAlpha2": "TD"
+  },
+  {
+    "name": "Africa/Niamey",
+    "countryAlpha2": "NE"
+  },
+  {
+    "name": "Africa/Nouakchott",
+    "countryAlpha2": "MR"
+  },
+  {
+    "name": "Africa/Ouagadougou",
+    "countryAlpha2": "BF"
+  },
+  {
+    "name": "Africa/Porto-Novo",
+    "countryAlpha2": "BJ"
+  },
+  {
+    "name": "Africa/Sao_Tome",
+    "countryAlpha2": "ST"
+  },
+  {
+    "name": "Africa/Tripoli",
+    "countryAlpha2": "LY"
+  },
+  {
+    "name": "Africa/Tunis",
+    "countryAlpha2": "TN"
+  },
+  {
+    "name": "Africa/Windhoek",
+    "countryAlpha2": "NA"
+  },
+  {
+    "name": "America/Adak",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Anchorage",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Anguilla",
+    "countryAlpha2": "AI"
+  },
+  {
+    "name": "America/Antigua",
+    "countryAlpha2": "AG"
+  },
+  {
+    "name": "America/Araguaina",
+    "countryAlpha2": "BR"
+  },
+  {
+    "name": "America/Argentina/Buenos_Aires",
+    "countryAlpha2": "AR"
+  },
+  {
+    "name": "America/Argentina/Catamarca",
+    "countryAlpha2": "AR"
+  },
+  {
+    "name": "America/Argentina/Cordoba",
+    "countryAlpha2": "AR"
+  },
+  {
+    "name": "America/Argentina/Jujuy",
+    "countryAlpha2": "AR"
+  },
+  {
+    "name": "America/Argentina/La_Rioja",
+    "countryAlpha2": "AR"
+  },
+  {
+    "name": "America/Argentina/Mendoza",
+    "countryAlpha2": "AR"
+  },
+  {
+    "name": "America/Argentina/Rio_Gallegos",
+    "countryAlpha2": "AR"
+  },
+  {
+    "name": "America/Argentina/Salta",
+    "countryAlpha2": "AR"
+  },
+  {
+    "name": "America/Argentina/San_Juan",
+    "countryAlpha2": "AR"
+  },
+  {
+    "name": "America/Argentina/San_Luis",
+    "countryAlpha2": "AR"
+  },
+  {
+    "name": "America/Argentina/Tucuman",
+    "countryAlpha2": "AR"
+  },
+  {
+    "name": "America/Argentina/Ushuaia",
+    "countryAlpha2": "AR"
+  },
+  {
+    "name": "America/Aruba",
+    "countryAlpha2": "AW"
+  },
+  {
+    "name": "America/Asuncion",
+    "countryAlpha2": "PY"
+  },
+  {
+    "name": "America/Atikokan",
+    "countryAlpha2": "CA"
+  },
+  {
+    "name": "America/Bahia",
+    "countryAlpha2": "BR"
+  },
+  {
+    "name": "America/Bahia_Banderas",
+    "countryAlpha2": "MX"
+  },
+  {
+    "name": "America/Barbados",
+    "countryAlpha2": "BB"
+  },
+  {
+    "name": "America/Belem",
+    "countryAlpha2": "BR"
+  },
+  {
+    "name": "America/Belize",
+    "countryAlpha2": "BZ"
+  },
+  {
+    "name": "America/Blanc-Sablon",
+    "countryAlpha2": "CA"
+  },
+  {
+    "name": "America/Boa_Vista",
+    "countryAlpha2": "BR"
+  },
+  {
+    "name": "America/Bogota",
+    "countryAlpha2": "CO"
+  },
+  {
+    "name": "America/Boise",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Cambridge_Bay",
+    "countryAlpha2": "CA"
+  },
+  {
+    "name": "America/Campo_Grande",
+    "countryAlpha2": "BR"
+  },
+  {
+    "name": "America/Cancun",
+    "countryAlpha2": "MX"
+  },
+  {
+    "name": "America/Caracas",
+    "countryAlpha2": "VE"
+  },
+  {
+    "name": "America/Cayenne",
+    "countryAlpha2": "GF"
+  },
+  {
+    "name": "America/Cayman",
+    "countryAlpha2": "KY"
+  },
+  {
+    "name": "America/Chicago",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Chihuahua",
+    "countryAlpha2": "MX"
+  },
+  {
+    "name": "America/Ciudad_Juarez",
+    "countryAlpha2": "MX"
+  },
+  {
+    "name": "America/Costa_Rica",
+    "countryAlpha2": "CR"
+  },
+  {
+    "name": "America/Coyhaique",
+    "countryAlpha2": "CL"
+  },
+  {
+    "name": "America/Creston",
+    "countryAlpha2": "CA"
+  },
+  {
+    "name": "America/Cuiaba",
+    "countryAlpha2": "BR"
+  },
+  {
+    "name": "America/Curacao",
+    "countryAlpha2": "CW"
+  },
+  {
+    "name": "America/Danmarkshavn",
+    "countryAlpha2": "GL"
+  },
+  {
+    "name": "America/Dawson",
+    "countryAlpha2": "CA"
+  },
+  {
+    "name": "America/Dawson_Creek",
+    "countryAlpha2": "CA"
+  },
+  {
+    "name": "America/Denver",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Detroit",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Dominica",
+    "countryAlpha2": "DM"
+  },
+  {
+    "name": "America/Edmonton",
+    "countryAlpha2": "CA"
+  },
+  {
+    "name": "America/Eirunepe",
+    "countryAlpha2": "BR"
+  },
+  {
+    "name": "America/El_Salvador",
+    "countryAlpha2": "SV"
+  },
+  {
+    "name": "America/Fort_Nelson",
+    "countryAlpha2": "CA"
+  },
+  {
+    "name": "America/Fortaleza",
+    "countryAlpha2": "BR"
+  },
+  {
+    "name": "America/Glace_Bay",
+    "countryAlpha2": "CA"
+  },
+  {
+    "name": "America/Goose_Bay",
+    "countryAlpha2": "CA"
+  },
+  {
+    "name": "America/Grand_Turk",
+    "countryAlpha2": "TC"
+  },
+  {
+    "name": "America/Grenada",
+    "countryAlpha2": "GD"
+  },
+  {
+    "name": "America/Guadeloupe",
+    "countryAlpha2": "GP"
+  },
+  {
+    "name": "America/Guatemala",
+    "countryAlpha2": "GT"
+  },
+  {
+    "name": "America/Guayaquil",
+    "countryAlpha2": "EC"
+  },
+  {
+    "name": "America/Guyana",
+    "countryAlpha2": "GY"
+  },
+  {
+    "name": "America/Halifax",
+    "countryAlpha2": "CA"
+  },
+  {
+    "name": "America/Havana",
+    "countryAlpha2": "CU"
+  },
+  {
+    "name": "America/Hermosillo",
+    "countryAlpha2": "MX"
+  },
+  {
+    "name": "America/Indiana/Indianapolis",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Indiana/Knox",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Indiana/Marengo",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Indiana/Petersburg",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Indiana/Tell_City",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Indiana/Vevay",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Indiana/Vincennes",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Indiana/Winamac",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Inuvik",
+    "countryAlpha2": "CA"
+  },
+  {
+    "name": "America/Iqaluit",
+    "countryAlpha2": "CA"
+  },
+  {
+    "name": "America/Jamaica",
+    "countryAlpha2": "JM"
+  },
+  {
+    "name": "America/Juneau",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Kentucky/Louisville",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Kentucky/Monticello",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Kralendijk",
+    "countryAlpha2": "BQ"
+  },
+  {
+    "name": "America/La_Paz",
+    "countryAlpha2": "BO"
+  },
+  {
+    "name": "America/Lima",
+    "countryAlpha2": "PE"
+  },
+  {
+    "name": "America/Los_Angeles",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Lower_Princes",
+    "countryAlpha2": "SX"
+  },
+  {
+    "name": "America/Maceio",
+    "countryAlpha2": "BR"
+  },
+  {
+    "name": "America/Managua",
+    "countryAlpha2": "NI"
+  },
+  {
+    "name": "America/Manaus",
+    "countryAlpha2": "BR"
+  },
+  {
+    "name": "America/Marigot",
+    "countryAlpha2": "MF"
+  },
+  {
+    "name": "America/Martinique",
+    "countryAlpha2": "MQ"
+  },
+  {
+    "name": "America/Matamoros",
+    "countryAlpha2": "MX"
+  },
+  {
+    "name": "America/Mazatlan",
+    "countryAlpha2": "MX"
+  },
+  {
+    "name": "America/Menominee",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Merida",
+    "countryAlpha2": "MX"
+  },
+  {
+    "name": "America/Metlakatla",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Mexico_City",
+    "countryAlpha2": "MX"
+  },
+  {
+    "name": "America/Miquelon",
+    "countryAlpha2": "PM"
+  },
+  {
+    "name": "America/Moncton",
+    "countryAlpha2": "CA"
+  },
+  {
+    "name": "America/Monterrey",
+    "countryAlpha2": "MX"
+  },
+  {
+    "name": "America/Montevideo",
+    "countryAlpha2": "UY"
+  },
+  {
+    "name": "America/Montserrat",
+    "countryAlpha2": "MS"
+  },
+  {
+    "name": "America/Nassau",
+    "countryAlpha2": "BS"
+  },
+  {
+    "name": "America/New_York",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Nome",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Noronha",
+    "countryAlpha2": "BR"
+  },
+  {
+    "name": "America/North_Dakota/Beulah",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/North_Dakota/Center",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/North_Dakota/New_Salem",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Nuuk",
+    "countryAlpha2": "GL"
+  },
+  {
+    "name": "America/Ojinaga",
+    "countryAlpha2": "MX"
+  },
+  {
+    "name": "America/Panama",
+    "countryAlpha2": "PA"
+  },
+  {
+    "name": "America/Paramaribo",
+    "countryAlpha2": "SR"
+  },
+  {
+    "name": "America/Phoenix",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/Port_of_Spain",
+    "countryAlpha2": "TT"
+  },
+  {
+    "name": "America/Port-au-Prince",
+    "countryAlpha2": "HT"
+  },
+  {
+    "name": "America/Porto_Velho",
+    "countryAlpha2": "BR"
+  },
+  {
+    "name": "America/Puerto_Rico",
+    "countryAlpha2": "PR"
+  },
+  {
+    "name": "America/Punta_Arenas",
+    "countryAlpha2": "CL"
+  },
+  {
+    "name": "America/Rankin_Inlet",
+    "countryAlpha2": "CA"
+  },
+  {
+    "name": "America/Recife",
+    "countryAlpha2": "BR"
+  },
+  {
+    "name": "America/Regina",
+    "countryAlpha2": "CA"
+  },
+  {
+    "name": "America/Resolute",
+    "countryAlpha2": "CA"
+  },
+  {
+    "name": "America/Rio_Branco",
+    "countryAlpha2": "BR"
+  },
+  {
+    "name": "America/Santarem",
+    "countryAlpha2": "BR"
+  },
+  {
+    "name": "America/Santiago",
+    "countryAlpha2": "CL"
+  },
+  {
+    "name": "America/Santo_Domingo",
+    "countryAlpha2": "DO"
+  },
+  {
+    "name": "America/Sao_Paulo",
+    "countryAlpha2": "BR"
+  },
+  {
+    "name": "America/Scoresbysund",
+    "countryAlpha2": "GL"
+  },
+  {
+    "name": "America/Sitka",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "America/St_Barthelemy",
+    "countryAlpha2": "BL"
+  },
+  {
+    "name": "America/St_Johns",
+    "countryAlpha2": "CA"
+  },
+  {
+    "name": "America/St_Kitts",
+    "countryAlpha2": "KN"
+  },
+  {
+    "name": "America/St_Lucia",
+    "countryAlpha2": "LC"
+  },
+  {
+    "name": "America/St_Thomas",
+    "countryAlpha2": "VI"
+  },
+  {
+    "name": "America/St_Vincent",
+    "countryAlpha2": "VC"
+  },
+  {
+    "name": "America/Swift_Current",
+    "countryAlpha2": "CA"
+  },
+  {
+    "name": "America/Tegucigalpa",
+    "countryAlpha2": "HN"
+  },
+  {
+    "name": "America/Thule",
+    "countryAlpha2": "GL"
+  },
+  {
+    "name": "America/Tijuana",
+    "countryAlpha2": "MX"
+  },
+  {
+    "name": "America/Toronto",
+    "countryAlpha2": "CA"
+  },
+  {
+    "name": "America/Tortola",
+    "countryAlpha2": "VG"
+  },
+  {
+    "name": "America/Vancouver",
+    "countryAlpha2": "CA"
+  },
+  {
+    "name": "America/Whitehorse",
+    "countryAlpha2": "CA"
+  },
+  {
+    "name": "America/Winnipeg",
+    "countryAlpha2": "CA"
+  },
+  {
+    "name": "America/Yakutat",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "Antarctica/Casey",
+    "countryAlpha2": "AQ"
+  },
+  {
+    "name": "Antarctica/Davis",
+    "countryAlpha2": "AQ"
+  },
+  {
+    "name": "Antarctica/DumontDUrville",
+    "countryAlpha2": "AQ"
+  },
+  {
+    "name": "Antarctica/Macquarie",
+    "countryAlpha2": "AU"
+  },
+  {
+    "name": "Antarctica/Mawson",
+    "countryAlpha2": "AQ"
+  },
+  {
+    "name": "Antarctica/McMurdo",
+    "countryAlpha2": "AQ"
+  },
+  {
+    "name": "Antarctica/Palmer",
+    "countryAlpha2": "AQ"
+  },
+  {
+    "name": "Antarctica/Rothera",
+    "countryAlpha2": "AQ"
+  },
+  {
+    "name": "Antarctica/Syowa",
+    "countryAlpha2": "AQ"
+  },
+  {
+    "name": "Antarctica/Troll",
+    "countryAlpha2": "AQ"
+  },
+  {
+    "name": "Antarctica/Vostok",
+    "countryAlpha2": "AQ"
+  },
+  {
+    "name": "Arctic/Longyearbyen",
+    "countryAlpha2": "SJ"
+  },
+  {
+    "name": "Asia/Aden",
+    "countryAlpha2": "YE"
+  },
+  {
+    "name": "Asia/Almaty",
+    "countryAlpha2": "KZ"
+  },
+  {
+    "name": "Asia/Amman",
+    "countryAlpha2": "JO"
+  },
+  {
+    "name": "Asia/Anadyr",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Asia/Aqtau",
+    "countryAlpha2": "KZ"
+  },
+  {
+    "name": "Asia/Aqtobe",
+    "countryAlpha2": "KZ"
+  },
+  {
+    "name": "Asia/Ashgabat",
+    "countryAlpha2": "TM"
+  },
+  {
+    "name": "Asia/Atyrau",
+    "countryAlpha2": "KZ"
+  },
+  {
+    "name": "Asia/Baghdad",
+    "countryAlpha2": "IQ"
+  },
+  {
+    "name": "Asia/Bahrain",
+    "countryAlpha2": "BH"
+  },
+  {
+    "name": "Asia/Baku",
+    "countryAlpha2": "AZ"
+  },
+  {
+    "name": "Asia/Bangkok",
+    "countryAlpha2": "TH"
+  },
+  {
+    "name": "Asia/Barnaul",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Asia/Beirut",
+    "countryAlpha2": "LB"
+  },
+  {
+    "name": "Asia/Bishkek",
+    "countryAlpha2": "KG"
+  },
+  {
+    "name": "Asia/Brunei",
+    "countryAlpha2": "BN"
+  },
+  {
+    "name": "Asia/Chita",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Asia/Colombo",
+    "countryAlpha2": "LK"
+  },
+  {
+    "name": "Asia/Damascus",
+    "countryAlpha2": "SY"
+  },
+  {
+    "name": "Asia/Dhaka",
+    "countryAlpha2": "BD"
+  },
+  {
+    "name": "Asia/Dili",
+    "countryAlpha2": "TL"
+  },
+  {
+    "name": "Asia/Dubai",
+    "countryAlpha2": "AE"
+  },
+  {
+    "name": "Asia/Dushanbe",
+    "countryAlpha2": "TJ"
+  },
+  {
+    "name": "Asia/Famagusta",
+    "countryAlpha2": "CY"
+  },
+  {
+    "name": "Asia/Gaza",
+    "countryAlpha2": "PS"
+  },
+  {
+    "name": "Asia/Hebron",
+    "countryAlpha2": "PS"
+  },
+  {
+    "name": "Asia/Ho_Chi_Minh",
+    "countryAlpha2": "VN"
+  },
+  {
+    "name": "Asia/Hong_Kong",
+    "countryAlpha2": "HK"
+  },
+  {
+    "name": "Asia/Hovd",
+    "countryAlpha2": "MN"
+  },
+  {
+    "name": "Asia/Irkutsk",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Asia/Jakarta",
+    "countryAlpha2": "ID"
+  },
+  {
+    "name": "Asia/Jayapura",
+    "countryAlpha2": "ID"
+  },
+  {
+    "name": "Asia/Jerusalem",
+    "countryAlpha2": "IL"
+  },
+  {
+    "name": "Asia/Kabul",
+    "countryAlpha2": "AF"
+  },
+  {
+    "name": "Asia/Kamchatka",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Asia/Karachi",
+    "countryAlpha2": "PK"
+  },
+  {
+    "name": "Asia/Kathmandu",
+    "countryAlpha2": "NP"
+  },
+  {
+    "name": "Asia/Khandyga",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Asia/Kolkata",
+    "countryAlpha2": "IN"
+  },
+  {
+    "name": "Asia/Krasnoyarsk",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Asia/Kuala_Lumpur",
+    "countryAlpha2": "MY"
+  },
+  {
+    "name": "Asia/Kuching",
+    "countryAlpha2": "MY"
+  },
+  {
+    "name": "Asia/Kuwait",
+    "countryAlpha2": "KW"
+  },
+  {
+    "name": "Asia/Macau",
+    "countryAlpha2": "MO"
+  },
+  {
+    "name": "Asia/Magadan",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Asia/Makassar",
+    "countryAlpha2": "ID"
+  },
+  {
+    "name": "Asia/Manila",
+    "countryAlpha2": "PH"
+  },
+  {
+    "name": "Asia/Muscat",
+    "countryAlpha2": "OM"
+  },
+  {
+    "name": "Asia/Nicosia",
+    "countryAlpha2": "CY"
+  },
+  {
+    "name": "Asia/Novokuznetsk",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Asia/Novosibirsk",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Asia/Omsk",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Asia/Oral",
+    "countryAlpha2": "KZ"
+  },
+  {
+    "name": "Asia/Phnom_Penh",
+    "countryAlpha2": "KH"
+  },
+  {
+    "name": "Asia/Pontianak",
+    "countryAlpha2": "ID"
+  },
+  {
+    "name": "Asia/Pyongyang",
+    "countryAlpha2": "KP"
+  },
+  {
+    "name": "Asia/Qatar",
+    "countryAlpha2": "QA"
+  },
+  {
+    "name": "Asia/Qostanay",
+    "countryAlpha2": "KZ"
+  },
+  {
+    "name": "Asia/Qyzylorda",
+    "countryAlpha2": "KZ"
+  },
+  {
+    "name": "Asia/Riyadh",
+    "countryAlpha2": "SA"
+  },
+  {
+    "name": "Asia/Sakhalin",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Asia/Samarkand",
+    "countryAlpha2": "UZ"
+  },
+  {
+    "name": "Asia/Seoul",
+    "countryAlpha2": "KR"
+  },
+  {
+    "name": "Asia/Shanghai",
+    "countryAlpha2": "CN"
+  },
+  {
+    "name": "Asia/Singapore",
+    "countryAlpha2": "SG"
+  },
+  {
+    "name": "Asia/Srednekolymsk",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Asia/Taipei",
+    "countryAlpha2": "TW"
+  },
+  {
+    "name": "Asia/Tashkent",
+    "countryAlpha2": "UZ"
+  },
+  {
+    "name": "Asia/Tbilisi",
+    "countryAlpha2": "GE"
+  },
+  {
+    "name": "Asia/Tehran",
+    "countryAlpha2": "IR"
+  },
+  {
+    "name": "Asia/Thimphu",
+    "countryAlpha2": "BT"
+  },
+  {
+    "name": "Asia/Tokyo",
+    "countryAlpha2": "JP"
+  },
+  {
+    "name": "Asia/Tomsk",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Asia/Ulaanbaatar",
+    "countryAlpha2": "MN"
+  },
+  {
+    "name": "Asia/Urumqi",
+    "countryAlpha2": "CN"
+  },
+  {
+    "name": "Asia/Ust-Nera",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Asia/Vientiane",
+    "countryAlpha2": "LA"
+  },
+  {
+    "name": "Asia/Vladivostok",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Asia/Yakutsk",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Asia/Yangon",
+    "countryAlpha2": "MM"
+  },
+  {
+    "name": "Asia/Yekaterinburg",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Asia/Yerevan",
+    "countryAlpha2": "AM"
+  },
+  {
+    "name": "Atlantic/Azores",
+    "countryAlpha2": "PT"
+  },
+  {
+    "name": "Atlantic/Bermuda",
+    "countryAlpha2": "BM"
+  },
+  {
+    "name": "Atlantic/Canary",
+    "countryAlpha2": "ES"
+  },
+  {
+    "name": "Atlantic/Cape_Verde",
+    "countryAlpha2": "CV"
+  },
+  {
+    "name": "Atlantic/Faroe",
+    "countryAlpha2": "FO"
+  },
+  {
+    "name": "Atlantic/Madeira",
+    "countryAlpha2": "PT"
+  },
+  {
+    "name": "Atlantic/Reykjavik",
+    "countryAlpha2": "IS"
+  },
+  {
+    "name": "Atlantic/South_Georgia",
+    "countryAlpha2": "GS"
+  },
+  {
+    "name": "Atlantic/St_Helena",
+    "countryAlpha2": "SH"
+  },
+  {
+    "name": "Atlantic/Stanley",
+    "countryAlpha2": "FK"
+  },
+  {
+    "name": "Australia/Adelaide",
+    "countryAlpha2": "AU"
+  },
+  {
+    "name": "Australia/Brisbane",
+    "countryAlpha2": "AU"
+  },
+  {
+    "name": "Australia/Broken_Hill",
+    "countryAlpha2": "AU"
+  },
+  {
+    "name": "Australia/Darwin",
+    "countryAlpha2": "AU"
+  },
+  {
+    "name": "Australia/Eucla",
+    "countryAlpha2": "AU"
+  },
+  {
+    "name": "Australia/Hobart",
+    "countryAlpha2": "AU"
+  },
+  {
+    "name": "Australia/Lindeman",
+    "countryAlpha2": "AU"
+  },
+  {
+    "name": "Australia/Lord_Howe",
+    "countryAlpha2": "AU"
+  },
+  {
+    "name": "Australia/Melbourne",
+    "countryAlpha2": "AU"
+  },
+  {
+    "name": "Australia/Perth",
+    "countryAlpha2": "AU"
+  },
+  {
+    "name": "Australia/Sydney",
+    "countryAlpha2": "AU"
+  },
+  {
+    "name": "Europe/Amsterdam",
+    "countryAlpha2": "NL"
+  },
+  {
+    "name": "Europe/Andorra",
+    "countryAlpha2": "AD"
+  },
+  {
+    "name": "Europe/Astrakhan",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Europe/Athens",
+    "countryAlpha2": "GR"
+  },
+  {
+    "name": "Europe/Belgrade",
+    "countryAlpha2": "RS"
+  },
+  {
+    "name": "Europe/Berlin",
+    "countryAlpha2": "DE"
+  },
+  {
+    "name": "Europe/Bratislava",
+    "countryAlpha2": "SK"
+  },
+  {
+    "name": "Europe/Brussels",
+    "countryAlpha2": "BE"
+  },
+  {
+    "name": "Europe/Bucharest",
+    "countryAlpha2": "RO"
+  },
+  {
+    "name": "Europe/Budapest",
+    "countryAlpha2": "HU"
+  },
+  {
+    "name": "Europe/Busingen",
+    "countryAlpha2": "DE"
+  },
+  {
+    "name": "Europe/Chisinau",
+    "countryAlpha2": "MD"
+  },
+  {
+    "name": "Europe/Copenhagen",
+    "countryAlpha2": "DK"
+  },
+  {
+    "name": "Europe/Dublin",
+    "countryAlpha2": "IE"
+  },
+  {
+    "name": "Europe/Gibraltar",
+    "countryAlpha2": "GI"
+  },
+  {
+    "name": "Europe/Guernsey",
+    "countryAlpha2": "GG"
+  },
+  {
+    "name": "Europe/Helsinki",
+    "countryAlpha2": "FI"
+  },
+  {
+    "name": "Europe/Isle_of_Man",
+    "countryAlpha2": "IM"
+  },
+  {
+    "name": "Europe/Istanbul",
+    "countryAlpha2": "TR"
+  },
+  {
+    "name": "Europe/Jersey",
+    "countryAlpha2": "JE"
+  },
+  {
+    "name": "Europe/Kaliningrad",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Europe/Kirov",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Europe/Kyiv",
+    "countryAlpha2": "UA"
+  },
+  {
+    "name": "Europe/Lisbon",
+    "countryAlpha2": "PT"
+  },
+  {
+    "name": "Europe/Ljubljana",
+    "countryAlpha2": "SI"
+  },
+  {
+    "name": "Europe/London",
+    "countryAlpha2": "GB"
+  },
+  {
+    "name": "Europe/Luxembourg",
+    "countryAlpha2": "LU"
+  },
+  {
+    "name": "Europe/Madrid",
+    "countryAlpha2": "ES"
+  },
+  {
+    "name": "Europe/Malta",
+    "countryAlpha2": "MT"
+  },
+  {
+    "name": "Europe/Mariehamn",
+    "countryAlpha2": "AX"
+  },
+  {
+    "name": "Europe/Minsk",
+    "countryAlpha2": "BY"
+  },
+  {
+    "name": "Europe/Monaco",
+    "countryAlpha2": "MC"
+  },
+  {
+    "name": "Europe/Moscow",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Europe/Oslo",
+    "countryAlpha2": "NO"
+  },
+  {
+    "name": "Europe/Paris",
+    "countryAlpha2": "FR"
+  },
+  {
+    "name": "Europe/Podgorica",
+    "countryAlpha2": "ME"
+  },
+  {
+    "name": "Europe/Prague",
+    "countryAlpha2": "CZ"
+  },
+  {
+    "name": "Europe/Riga",
+    "countryAlpha2": "LV"
+  },
+  {
+    "name": "Europe/Rome",
+    "countryAlpha2": "IT"
+  },
+  {
+    "name": "Europe/Samara",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Europe/San_Marino",
+    "countryAlpha2": "SM"
+  },
+  {
+    "name": "Europe/Sarajevo",
+    "countryAlpha2": "BA"
+  },
+  {
+    "name": "Europe/Saratov",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Europe/Simferopol",
+    "countryAlpha2": "UA"
+  },
+  {
+    "name": "Europe/Skopje",
+    "countryAlpha2": "MK"
+  },
+  {
+    "name": "Europe/Sofia",
+    "countryAlpha2": "BG"
+  },
+  {
+    "name": "Europe/Stockholm",
+    "countryAlpha2": "SE"
+  },
+  {
+    "name": "Europe/Tallinn",
+    "countryAlpha2": "EE"
+  },
+  {
+    "name": "Europe/Tirane",
+    "countryAlpha2": "AL"
+  },
+  {
+    "name": "Europe/Ulyanovsk",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Europe/Vaduz",
+    "countryAlpha2": "LI"
+  },
+  {
+    "name": "Europe/Vatican",
+    "countryAlpha2": "VA"
+  },
+  {
+    "name": "Europe/Vienna",
+    "countryAlpha2": "AT"
+  },
+  {
+    "name": "Europe/Vilnius",
+    "countryAlpha2": "LT"
+  },
+  {
+    "name": "Europe/Volgograd",
+    "countryAlpha2": "RU"
+  },
+  {
+    "name": "Europe/Warsaw",
+    "countryAlpha2": "PL"
+  },
+  {
+    "name": "Europe/Zagreb",
+    "countryAlpha2": "HR"
+  },
+  {
+    "name": "Europe/Zurich",
+    "countryAlpha2": "CH"
+  },
+  {
+    "name": "Indian/Antananarivo",
+    "countryAlpha2": "MG"
+  },
+  {
+    "name": "Indian/Chagos",
+    "countryAlpha2": "IO"
+  },
+  {
+    "name": "Indian/Christmas",
+    "countryAlpha2": "CX"
+  },
+  {
+    "name": "Indian/Cocos",
+    "countryAlpha2": "CC"
+  },
+  {
+    "name": "Indian/Comoro",
+    "countryAlpha2": "KM"
+  },
+  {
+    "name": "Indian/Kerguelen",
+    "countryAlpha2": "TF"
+  },
+  {
+    "name": "Indian/Mahe",
+    "countryAlpha2": "SC"
+  },
+  {
+    "name": "Indian/Maldives",
+    "countryAlpha2": "MV"
+  },
+  {
+    "name": "Indian/Mauritius",
+    "countryAlpha2": "MU"
+  },
+  {
+    "name": "Indian/Mayotte",
+    "countryAlpha2": "YT"
+  },
+  {
+    "name": "Indian/Reunion",
+    "countryAlpha2": "RE"
+  },
+  {
+    "name": "Pacific/Apia",
+    "countryAlpha2": "WS"
+  },
+  {
+    "name": "Pacific/Auckland",
+    "countryAlpha2": "NZ"
+  },
+  {
+    "name": "Pacific/Bougainville",
+    "countryAlpha2": "PG"
+  },
+  {
+    "name": "Pacific/Chatham",
+    "countryAlpha2": "NZ"
+  },
+  {
+    "name": "Pacific/Chuuk",
+    "countryAlpha2": "FM"
+  },
+  {
+    "name": "Pacific/Easter",
+    "countryAlpha2": "CL"
+  },
+  {
+    "name": "Pacific/Efate",
+    "countryAlpha2": "VU"
+  },
+  {
+    "name": "Pacific/Fakaofo",
+    "countryAlpha2": "TK"
+  },
+  {
+    "name": "Pacific/Fiji",
+    "countryAlpha2": "FJ"
+  },
+  {
+    "name": "Pacific/Funafuti",
+    "countryAlpha2": "TV"
+  },
+  {
+    "name": "Pacific/Galapagos",
+    "countryAlpha2": "EC"
+  },
+  {
+    "name": "Pacific/Gambier",
+    "countryAlpha2": "PF"
+  },
+  {
+    "name": "Pacific/Guadalcanal",
+    "countryAlpha2": "SB"
+  },
+  {
+    "name": "Pacific/Guam",
+    "countryAlpha2": "GU"
+  },
+  {
+    "name": "Pacific/Honolulu",
+    "countryAlpha2": "US"
+  },
+  {
+    "name": "Pacific/Kanton",
+    "countryAlpha2": "KI"
+  },
+  {
+    "name": "Pacific/Kiritimati",
+    "countryAlpha2": "KI"
+  },
+  {
+    "name": "Pacific/Kosrae",
+    "countryAlpha2": "FM"
+  },
+  {
+    "name": "Pacific/Kwajalein",
+    "countryAlpha2": "MH"
+  },
+  {
+    "name": "Pacific/Majuro",
+    "countryAlpha2": "MH"
+  },
+  {
+    "name": "Pacific/Marquesas",
+    "countryAlpha2": "PF"
+  },
+  {
+    "name": "Pacific/Midway",
+    "countryAlpha2": "UM"
+  },
+  {
+    "name": "Pacific/Nauru",
+    "countryAlpha2": "NR"
+  },
+  {
+    "name": "Pacific/Niue",
+    "countryAlpha2": "NU"
+  },
+  {
+    "name": "Pacific/Norfolk",
+    "countryAlpha2": "NF"
+  },
+  {
+    "name": "Pacific/Noumea",
+    "countryAlpha2": "NC"
+  },
+  {
+    "name": "Pacific/Pago_Pago",
+    "countryAlpha2": "AS"
+  },
+  {
+    "name": "Pacific/Palau",
+    "countryAlpha2": "PW"
+  },
+  {
+    "name": "Pacific/Pitcairn",
+    "countryAlpha2": "PN"
+  },
+  {
+    "name": "Pacific/Pohnpei",
+    "countryAlpha2": "FM"
+  },
+  {
+    "name": "Pacific/Port_Moresby",
+    "countryAlpha2": "PG"
+  },
+  {
+    "name": "Pacific/Rarotonga",
+    "countryAlpha2": "CK"
+  },
+  {
+    "name": "Pacific/Saipan",
+    "countryAlpha2": "MP"
+  },
+  {
+    "name": "Pacific/Tahiti",
+    "countryAlpha2": "PF"
+  },
+  {
+    "name": "Pacific/Tarawa",
+    "countryAlpha2": "KI"
+  },
+  {
+    "name": "Pacific/Tongatapu",
+    "countryAlpha2": "TO"
+  },
+  {
+    "name": "Pacific/Wake",
+    "countryAlpha2": "UM"
+  },
+  {
+    "name": "Pacific/Wallis",
+    "countryAlpha2": "WF"
+  },
+  {
+    "name": "UTC",
+    "countryAlpha2": null
+  }
+]

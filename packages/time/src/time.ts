@@ -35,11 +35,16 @@ export function isLocalDate(val: unknown): val is LocalDate {
 }
 
 export function isValidTimeZone(tz: string): boolean {
-  if (typeof tz !== 'string' || !tz.trim()) {
+  if (typeof tz !== 'string') {
+    return false;
+  }
+  const trimmed = tz.trim();
+  // Reject offset strings (e.g. +07:00, -05:00) which are not IANA zone names
+  if (!trimmed || /^[+-]/.test(trimmed)) {
     return false;
   }
   try {
-    Intl.DateTimeFormat(undefined, { timeZone: tz });
+    Intl.DateTimeFormat(undefined, { timeZone: trimmed });
     return true;
   } catch {
     return false;

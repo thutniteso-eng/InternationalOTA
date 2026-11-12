@@ -61,6 +61,16 @@ describe('packages/time - Unit Tests', () => {
       expect(isValidTimeZone('')).toBe(false);
       expect(isValidTimeZone('   ')).toBe(false);
     });
+
+    it('rejects raw offset strings as time zones (E3)', () => {
+      expect(isValidTimeZone('+07:00')).toBe(false);
+      expect(isValidTimeZone('-05:00')).toBe(false);
+      expect(isValidTimeZone('+00:00')).toBe(false);
+      expect(isValidTimeZone('+0700')).toBe(false);
+      expect(isValidTimeZone('-0500')).toBe(false);
+      expect(isValidTimeZone('+07')).toBe(false);
+      expect(isValidTimeZone('-05')).toBe(false);
+    });
   });
 
   describe('nightsBetween', () => {
