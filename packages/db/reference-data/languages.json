@@ -1,0 +1,32 @@
+[
+  {
+    "tag": "vi",
+    "nameEn": "Vietnamese",
+    "nameNative": "Tiếng Việt",
+    "enabled": true
+  },
+  {
+    "tag": "en",
+    "nameEn": "English",
+    "nameNative": "English",
+    "enabled": true
+  },
+  {
+    "tag": "ko",
+    "nameEn": "Korean",
+    "nameNative": "한국어",
+    "enabled": false
+  },
+  {
+    "tag": "zh-Hans",
+    "nameEn": "Simplified Chinese",
+    "nameNative": "简体中文",
+    "enabled": false
+  },
+  {
+    "tag": "ja",
+    "nameEn": "Japanese",
+    "nameNative": "日本語",
+    "enabled": false
+  }
+]

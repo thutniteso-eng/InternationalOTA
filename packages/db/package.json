@@ -22,9 +22,11 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "format:check": "prettier --check src test",
+    "format:check": "prettier --check src test scripts",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "pnpm build && node dist/migrate.js"
+    "db:migrate": "pnpm build && node dist/migrate.js",
+    "db:seed": "pnpm build && node dist/seed.js",
+    "generate:reference-data": "node --experimental-strip-types scripts/generate-reference-data.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.4",
@@ -32,8 +34,12 @@
     "uuidv7": "^1.0.2"
   },
   "devDependencies": {
+    "@internationalota/money": "workspace:*",
+    "@internationalota/time": "workspace:*",
     "@types/pg": "^8.11.11",
+    "currency-codes": "^2.2.0",
     "drizzle-kit": "^0.30.5",
+    "i18n-iso-countries": "^7.14.0",
     "typescript": "^5.7.3",
     "vitest": "^3.0.5"
   }
