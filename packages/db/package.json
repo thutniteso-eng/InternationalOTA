@@ -15,11 +15,6 @@
       "types": "./dist/schema/index.d.ts",
       "import": "./dist/schema/index.js",
       "default": "./dist/schema/index.js"
-    },
-    "./test": {
-      "types": "./dist/test/test-db.d.ts",
-      "import": "./dist/test/test-db.js",
-      "default": "./dist/test/test-db.js"
     }
   },
   "scripts": {
@@ -29,7 +24,7 @@
     "test": "vitest run",
     "format:check": "prettier --check src test",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "node dist/migrate.js"
+    "db:migrate": "pnpm build && node dist/migrate.js"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.4",

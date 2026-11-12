@@ -9,6 +9,9 @@ describe('HealthController (HTTP)', () => {
   let baseUrl: string;
 
   beforeAll(async () => {
+    process.env.DATABASE_URL =
+      process.env.DATABASE_URL || 'postgresql://ota_user:ota_password@localhost:55432/ota_dev';
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();

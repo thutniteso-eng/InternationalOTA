@@ -20,10 +20,13 @@ export interface DbInstance {
 }
 
 export function createDbClient(options: CreateDbClientOptions = {}): DbInstance {
-  const connectionString =
-    options.connectionString ??
-    process.env.DATABASE_URL ??
-    'postgresql://ota_user:ota_password@localhost:55432/ota_dev';
+  const connectionString = options.connectionString ?? process.env.DATABASE_URL;
+
+  if (!connectionString) {
+    throw new Error(
+      'DATABASE_URL environment variable is required to create a database client, or provide connectionString in options',
+    );
+  }
 
   const pool =
     options.pool ??

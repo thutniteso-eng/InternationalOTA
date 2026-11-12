@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createDbClient } from '../src/client.ts';
 import { id, money, timestamps } from '../src/columns.ts';
 import { assertCanMigrate, runMigrations } from '../src/migrate.ts';
 import { appMeta, platformSchema } from '../src/schema/platform.ts';
@@ -22,6 +23,37 @@ describe('Database foundation integration tests', () => {
     if (testDb) {
       await testDb.teardown();
     }
+  });
+
+  describe('createDbClient', () => {
+    it('throws if DATABASE_URL is unset and no connectionString is provided', () => {
+      const origUrl = process.env.DATABASE_URL;
+      delete process.env.DATABASE_URL;
+      try {
+        expect(() => createDbClient()).toThrow(
+          /DATABASE_URL environment variable is required to create a database client, or provide connectionString in options/,
+        );
+      } finally {
+        if (origUrl !== undefined) {
+          process.env.DATABASE_URL = origUrl;
+        }
+      }
+    });
+
+    it('creates client successfully when connectionString is explicitly provided', () => {
+      const origUrl = process.env.DATABASE_URL;
+      delete process.env.DATABASE_URL;
+      try {
+        const client = createDbClient({ connectionString: testDb.testUrl });
+        expect(client.db).toBeDefined();
+        expect(client.pool).toBeDefined();
+        void client.pool.end();
+      } finally {
+        if (origUrl !== undefined) {
+          process.env.DATABASE_URL = origUrl;
+        }
+      }
+    });
   });
 
   describe('schema and column helpers', () => {
