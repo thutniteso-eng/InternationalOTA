@@ -327,3 +327,47 @@ No known vulnerabilities found
 ## Remaining risks
 
 - None. Database migrations and seeds run deterministically in CI and local environments. All constraints and cross-package relationships are strictly validated by automated tests.
+
+---
+
+## Corrections (F1–F5 Review Response)
+
+Claude reviewed PR #7 (`a4cb2bb`) and requested corrections F1–F5. All have been implemented and verified in a fresh clone:
+
+### F1 — Seed Atomic Upsert with `IS DISTINCT FROM`
+- **Issue**: `seedReferenceData` used `onConflictDoNothing()`. Any updates in the JSON reference files (such as enabling a currency for sale or updating country metadata) were silently ignored by PostgreSQL on re-seed.
+- **Change**: Updated `seedReferenceData` in `packages/db/src/seed.ts` to perform a true upsert using `onConflictDoUpdate`. The conflict target is the primary key of each reference table (`alpha2`, `code`, `tag`, `name`), and `setWhere` specifies `(columns) IS DISTINCT FROM (excluded.columns)`. As a result:
+  - Rows with modified values are updated and have their `updated_at` timestamp refreshed via `sql\`now()\``.
+  - Rows with identical values are not updated, preserving their original `updated_at` timestamp and fulfilling the idempotency invariant.
+  - Rows omitted from the JSON files are retained in the database (not deleted), documented in `seed.ts` docstrings.
+- **Evidence**: Added integration test `upserts updated rows and advances updated_at while preserving unchanged rows and retained rows (F1)` in `packages/db/test/reference.spec.ts`:
+  - Modifying `KWD` (`enabledForSale = true`, `nameEn = "Kuwaiti Dinar (Modified)"`) in a temporary seed directory updated the row and advanced `updated_at`.
+  - Unmodified row `USD` remained unchanged with identical `updated_at`.
+  - Row omitted from the temporary file (`ZWG`) remained intact in the database.
+  - Test passed with 100% success.
+
+### F2 — Atomic Seeding in Single Transaction
+- **Issue**: Individual table seed queries were executed sequentially without a surrounding transaction block, leaving the possibility of partial writes if an error occurred midway.
+- **Change**: Wrapped the entire seed sequence in `packages/db/src/seed.ts` inside `await db.transaction(async (tx) => { ... })`. All operations (`countries`, `currencies`, `languages`, `time_zones`) execute on the transactional client `tx`.
+- **Evidence**: Verified atomic transaction execution in local tests and fresh clone CI run.
+
+### F3 — ISO 4217 "N.A." Minor Units Recorded as NULL
+- **Issue**: `currency-codes` mapped minor units for commodities, bond market units, and special test codes to `0` instead of `null`. ISO 4217 specifies minor units for these codes as "N.A."
+- **Change**:
+  - Added `ISO_4217_NA_MINOR_UNITS` set in `packages/db/scripts/generate-reference-data.ts` covering all 13 ISO 4217 "N.A." codes: `XAG, XAU, XBA, XBB, XBC, XBD, XDR, XPD, XPT, XSU, XTS, XUA, XXX`.
+  - Re-ran generator and committed updated `packages/db/reference-data/currencies.json` with `minorUnits: null` for these 13 entries.
+  - Circulating fiat currencies with exponent 0 (`XAF, XOF, XPF`) remain `minorUnits: 0`.
+- **Evidence**: Added unit test `records ISO 4217 "N.A." minor units as NULL for non-currency and bond codes (F3)` in `packages/db/test/reference.spec.ts`. All 13 codes assert `minorUnits === null`, and `XAF, XOF, XPF` assert `minorUnits === 0`. Test passed.
+
+### F4 — Provenance Details in SOURCES.md
+- **Issue**: `SOURCES.md` lacked the tzdata version used to generate `time-zones.json`, and did not explain why `XK/XKK/983` (Kosovo) is present despite being a user-assigned ISO code element.
+- **Change**: Updated `packages/db/reference-data/SOURCES.md`:
+  - Recorded exact tzdata version: `2026e` (system package `tzdata` version `2026e-0ubuntu0.22.04.1`, source file `/usr/share/zoneinfo/zone.tab`).
+  - Added Kosovo documentation note: `XK/XKK/983` is a user-assigned ISO 3166-1 code element, deliberately included because Kosovo is an international travel destination.
+  - Added note on ISO 4217 "N.A." minor units.
+- **Evidence**: `packages/db/reference-data/SOURCES.md` reviewed and formatted cleanly with Prettier.
+
+### F5 — License Exception Protocol Acknowledged
+- **Issue**: The dev-only transitive license exception for `nub@0.0.0` (`MIT/X11`) was added without prior review approval.
+- **Resolution**: Claude approved `nub@0.0.0` as an MIT-equivalent, dev-only transitive dependency of `currency-codes`. Protocol requirement is noted: any future license exception will be raised as a blocker for Claude's explicit decision before committing.
+
