@@ -11,3 +11,4 @@
 - P1-02 re-reviewed at e403a6b: ACCEPTED (SPDX parser verified on 11 edge cases; 282 packages licence-clean).
 - P1-02 merged. P1-03 reviewed: ACCEPTED WITH LIMITATIONS (lock test mutation-verified; D1 fallback creds, D2 migrate needs build, D3 broken export → P1-04). Added TASK-P1-04 spec. Branch protection unavailable on free private repo → D-014.
 - P1-04 reviewed: ACCEPTED WITH LIMITATIONS (rounding/allocation verified, ESLint float ban mutation-verified; E1 FX rate<=0 accepted, E2 FX snapshot defaults, E3 tz validation → P1-05). Added TASK-P1-05 spec.
+- P1-05 re-reviewed at ab8a554: ACCEPTED (upsert, idempotency, atomicity, ISO N.A. verified). D-014 decided: no GitHub Pro for now, revisit before Phase 2. Added TASK-P1-07 spec; P1-06 waits for D-007.

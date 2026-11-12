@@ -12,9 +12,11 @@ Task status:
 | P1-01 Monorepo skeleton | DONE — merged (PR #1) with limitations L1, L3 |
 | P1-02 CI | DONE — merged (PR #2) |
 | P1-03 DB foundation | DONE — merged (PR #3); D1–D3 fixed in P1-04 |
-| P1-04 Money, FX, time | ACCEPTED WITH LIMITATIONS (E1–E3 → P1-05) — awaiting merge of PR #5 |
-| P1-05 Reference data | READY — spec in implementation/tasks (after PR #5 merged) |
+| P1-04 Money, FX, time | DONE — merged (PR #5); E1–E3 fixed in P1-05 |
+| P1-05 Reference data | ACCEPTED — awaiting merge of PR #7 |
+| P1-06 Identity | BLOCKED — waits for D-007 (Claude analysis in progress) |
+| P1-07 Idempotency-Key | READY — spec in implementation/tasks (after PR #7 merged) |
 
 No application code exists yet.
 
-Note: GitHub branch protection / rulesets are NOT available for private repos on the free plan (API returned 403 "Upgrade to GitHub Pro"). Until the Owner decides (D-014), merges rely on the rule "only PRs Claude marked ACCEPTED, with green CI".
+Note: GitHub branch protection / rulesets are NOT available for private repos on the free plan (API returned 403 "Upgrade to GitHub Pro"). Owner decided D-014 = no upgrade for now; merges rely on the rule "only PRs Claude marked ACCEPTED, with green CI".
