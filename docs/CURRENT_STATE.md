@@ -4,7 +4,7 @@ Phase: **1 started** (Phase 0 remaining items run in parallel: HAIP deep audit, 
 Repo: github.com/thutniteso-eng/InternationalOTA (private). Owner works in WSL on Windows; Antigravity implements; Claude reviews PRs on GitHub.
 
 Approved: D-001, D-002, D-003, D-005, D-006, D-008, D-009, D-010. Accepted technical: D-011 Drizzle, D-012 pg-boss, D-013 runtime.
-Open: D-004 (merchant model), D-007 (identity).
+Open: D-004 (merchant model). Decided: D-007 Better Auth, D-014 no GitHub Pro (revisit before Phase 2).
 
 Task status:
 | Task | Status |
@@ -13,9 +13,9 @@ Task status:
 | P1-02 CI | DONE — merged (PR #2) |
 | P1-03 DB foundation | DONE — merged (PR #3); D1–D3 fixed in P1-04 |
 | P1-04 Money, FX, time | DONE — merged (PR #5); E1–E3 fixed in P1-05 |
-| P1-05 Reference data | ACCEPTED — awaiting merge of PR #7 |
-| P1-06 Identity | BLOCKED — waits for D-007 (Claude analysis in progress) |
-| P1-07 Idempotency-Key | READY — spec in implementation/tasks (after PR #7 merged) |
+| P1-05 Reference data | DONE — merged (PR #7) |
+| P1-06 Identity | READY — spec in implementation/tasks (start after P1-07 merged) |
+| P1-07 Idempotency-Key | REJECTED — corrections G1–G6 requested (PR #9) |
 
 No application code exists yet.
 
