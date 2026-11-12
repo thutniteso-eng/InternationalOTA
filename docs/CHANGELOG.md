@@ -10,3 +10,4 @@
 - P1-01 merged. P1-02 PR #2 reviewed: REJECTED (licence parser precedence bug lets GPL pass; exceptions not bound to licence; silent JSON errors; tools/ unlinted). Approved licence exceptions: caniuse-lite (CC-BY-4.0), sharp-libvips (LGPL-3.0, server-side only).
 - P1-02 re-reviewed at e403a6b: ACCEPTED (SPDX parser verified on 11 edge cases; 282 packages licence-clean).
 - P1-02 merged. P1-03 reviewed: ACCEPTED WITH LIMITATIONS (lock test mutation-verified; D1 fallback creds, D2 migrate needs build, D3 broken export → P1-04). Added TASK-P1-04 spec. Branch protection unavailable on free private repo → D-014.
+- P1-04 reviewed: ACCEPTED WITH LIMITATIONS (rounding/allocation verified, ESLint float ban mutation-verified; E1 FX rate<=0 accepted, E2 FX snapshot defaults, E3 tz validation → P1-05). Added TASK-P1-05 spec.
