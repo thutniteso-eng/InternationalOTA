@@ -9,7 +9,7 @@ Status: PROPOSED → APPROVED / REJECTED by Project Owner. Full ADR text goes in
 | D-004 | Merchant model | Decide agent vs merchant-of-record (drives payments, tax, invoicing, refunds) — needs legal/accounting advice | OPEN (Owner) |
 | D-005 | Supply strategy | Mix: direct contracts (local hotels/tours) + one wholesaler/bedbank API; evaluate contracts before integration | APPROVED 2026-11-11 |
 | D-006 | Workflow engine | DB-persisted saga + pg-boss/BullMQ for MVP; Temporal re-evaluated at Phase 3 | APPROVED 2026-11-11 |
-| D-007 | Identity | Keycloak vs embedded auth library — decide after spike | OPEN |
+| D-007 | Identity | **Better Auth** (MIT, embedded) behind our own `identity` module; user data in our PostgreSQL schema `identity`; roles in our own `identity.user_roles`; exact version pin; no module outside `identity` may import it. Keycloak rejected for now (separate JVM service, only latest minor gets security fixes → high ops load for a one-person team). Revisit if enterprise partner SSO is required (~Phase 4). Known risk: library acquired by Vercel (2026-07) — mitigated by MIT licence + wrapper | DECIDED (Owner) 2026-11-12 |
 | D-008 | Search | PostgreSQL FTS + PostGIS first; OpenSearch deferred | APPROVED 2026-11-11 |
 | D-009 | Mobile | PWA first; native framework chosen at Phase 5 | APPROVED 2026-11-11 |
 | D-010 | Rejections | Sharetribe Go rejected (licence excludes SaaS, unmaintained); QloApps rejected as foundation | APPROVED 2026-11-11 |
