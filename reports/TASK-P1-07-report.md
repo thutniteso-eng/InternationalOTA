@@ -259,3 +259,71 @@ Restoring the `ON CONFLICT DO NOTHING` and `SELECT ... FOR UPDATE` logic complet
 ## Remaining risks
 
 - None. Concurrent requests are serialized at the database row level using PostgreSQL transactions and `FOR UPDATE` row locks. All acceptance criteria pass reliably.
+
+---
+
+## Corrections (G1–G6)
+
+Following the PR #9 review of commit `aa3728b`, all six items (G1–G6) were addressed:
+
+### G1 — Deterministic overlap in Criterion 1 concurrency test & exact mutation evidence
+- **Change**:
+  - Added a test-only `testGate` (`holdFirst`, `open`, `release`) in `apps/api/src/modules/idempotency/test-idempotent-counter.controller.ts` so the first in-flight request deterministically pauses inside the handler before incrementing.
+  - Updated Criterion 1 in `apps/api/src/modules/idempotency/idempotency.spec.ts`: creates a closed gate → fires request #1 → polls `platform.idempotency_keys` until `state = 'in_progress'` → fires the remaining 19 requests in parallel and awaits them → asserts all 19 receive `409 Conflict` (`application/problem+json`, `Retry-After: 1`) → releases the gate → awaits request #1 (`201`, `{ count: 1 }`) → asserts DB counter is `1` and row is `completed` → sends one more request with the same key and asserts replay (`Idempotent-Replayed: true`, counter still `1`).
+- **Mutation evidence (`evaluateRow`: `in_progress` → `execute`)**:
+  Temporarily changing `if (existing.state === 'in_progress') { return { action: 'error_409' }; }` to `return { action: 'execute', lockedUntilText: existing.lockedUntilText };` caused Criterion 1 to fail immediately:
+  ```
+   ❯ src/modules/idempotency/idempotency.spec.ts (8 tests | 1 failed) 537ms
+     × Idempotency module integration tests > Criterion 1: Concurrency - 1 in-flight request holds gate while 19 parallel requests receive 409, then counter is 1 and retry replays 150ms
+       → expected 201 to be 409 // Object.is equality
+
+   FAIL  src/modules/idempotency/idempotency.spec.ts > Idempotency module integration tests > Criterion 1: Concurrency - 1 in-flight request holds gate while 19 parallel requests receive 409, then counter is 1 and retry replays
+  AssertionError: expected 201 to be 409 // Object.is equality
+
+  - Expected
+  + Received
+
+  - 409
+  + 201
+
+   ❯ src/modules/idempotency/idempotency.spec.ts:130:26
+      128|     // 5. Assert ALL 19 received 409 Conflict with Retry-After: 1 and …
+      129|     for (const res of concurrentResponses) {
+      130|       expect(res.status).toBe(409);
+         |                          ^
+      131|       expect(res.headers.get('Retry-After')).toBe('1');
+      132|       expect(res.headers.get('Content-Type')).toContain('application/p…
+  ```
+  Restoring `return { action: 'error_409' };` made all 8 tests pass.
+
+### G2 — Never leak internal error details on 5xx
+- **Change**:
+  - Updated `ProblemDetailsFilter` (`apps/api/src/common/http/problem-details.filter.ts`) so that any response with `status >= 500` (both `HttpException` and arbitrary `Error`/unknown values) always returns the generic `detail: 'An unexpected internal error occurred'` and logs the real error server-side as structured JSON via Nest `Logger.error`.
+  - Added test `G2: 5xx errors never leak internal Error messages to clients` in `apps/api/src/modules/idempotency/idempotency.spec.ts`, throwing `new Error('secret SQL detail: SELECT * FROM internal_secrets')` and verifying the response body is 500 `application/problem+json` without leaking any internal text.
+
+### G3 — Compute expiry and staleness with the DB clock in SQL
+- **Change**:
+  - Removed `new Date()` comparisons in `IdempotencyInterceptor.evaluateRow` (`apps/api/src/modules/idempotency/idempotency.interceptor.ts`).
+  - Selected `isExpired: sql<boolean>\`${idempotencyKeys.expiresAt} < now()\`` and `isStale: sql<boolean>\`${idempotencyKeys.lockedUntil} < now()\`` directly in the `SELECT ... FOR UPDATE` query (`selectForUpdate`).
+
+### G4 — Isolated temporary PostgreSQL database for integration tests (no hard-coded credentials)
+- **Change**:
+  - Added `apps/api/test/test-db.ts` (`createTestDatabase()`), which requires `process.env.DATABASE_URL` (no hard-coded fallback credentials), creates a fresh `ota_test_<timestamp>_<random>` database, runs forward-only migrations against it, and drops it on teardown.
+  - Updated both `apps/api/src/modules/idempotency/idempotency.spec.ts` and `apps/api/src/health.controller.spec.ts` to run against their own isolated temporary database instead of wiping any shared database.
+  - Updated `apps/api/tsconfig.json`, `apps/api/tsconfig.build.json`, and `apps/api/package.json` (`format:check`) to include `apps/api/test/`.
+
+### G5 — Fencing on completion
+- **Change**:
+  - Captured the execution's exact `locked_until::text` timestamp from PostgreSQL `.returning()` on initial insert, reinsert, and stale/expired takeover in `apps/api/src/modules/idempotency/idempotency.interceptor.ts`.
+  - Added ownership fencing predicate (`scope`, `key`, `state = 'in_progress'`, `request_hash`, and `locked_until = $ownedLockedUntil::timestamptz`) to both the completion `UPDATE` and failure `DELETE` statements.
+  - When 0 rows are affected, the interceptor does NOT overwrite the row and does NOT turn the response into a replay; it logs a structured WARN containing `scope` and `key` and returns the execution's own response as-is.
+  - Documented in `IdempotencyInterceptor` JSDoc that `@Idempotent()` handlers must finish well within the 60-second lock window.
+  - Added test `G5: Fencing on completion prevents a stale execution from overwriting a takeover execution` in `apps/api/src/modules/idempotency/idempotency.spec.ts`.
+
+### G6 — Relocate `ProblemDetailsFilter` to `apps/api/src/common/http/`
+- **Change**:
+  - Moved `ProblemDetailsFilter` from `apps/api/src/modules/idempotency/problem-details.filter.ts` to `apps/api/src/common/http/problem-details.filter.ts`.
+  - Removed the `/health` special case so health probe errors also return RFC 9457 `application/problem+json`.
+  - Registered `ProblemDetailsFilter` globally via `APP_FILTER` in `apps/api/src/app.module.ts` and removed it from `IdempotencyModule` and `apps/api/src/modules/idempotency/index.ts`.
+  - Updated `apps/api/src/health.controller.spec.ts` to assert 503 `application/problem+json` on database failure.
+

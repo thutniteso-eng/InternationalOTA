@@ -1,4 +1,4 @@
-import { type DatabaseClient, idempotencyKeys, type IdempotencyKey } from '@internationalota/db';
+import { type DatabaseClient, idempotencyKeys } from '@internationalota/db';
 import {
   BadRequestException,
   type CallHandler,
@@ -6,6 +6,7 @@ import {
   type ExecutionContext,
   Inject,
   Injectable,
+  Logger,
   type NestInterceptor,
   UnprocessableEntityException,
 } from '@nestjs/common';
@@ -18,8 +19,20 @@ import { DRIZZLE_DB } from '../../database/database.module.js';
 import { computeRequestHash, computeScope, isValidIdempotencyKey } from './hash.js';
 import { IDEMPOTENT_METADATA_KEY } from './idempotent.decorator.js';
 
+interface EvaluatedRow {
+  scope: string;
+  key: string;
+  requestHash: string;
+  state: string;
+  responseStatus: number | null;
+  responseBody: unknown;
+  lockedUntilText: string;
+  isExpired: boolean;
+  isStale: boolean;
+}
+
 type ConflictDecision =
-  | { action: 'execute' }
+  | { action: 'execute'; lockedUntilText: string }
   | { action: 'error_422' }
   | { action: 'error_409' }
   | { action: 'replay'; status: number; body: unknown };
@@ -28,9 +41,15 @@ type ConflictDecision =
  * Interceptor implementing the IETF HTTPAPI Idempotency-Key specification.
  *
  * Prevents double-execution of mutating operations across concurrent and retry requests.
+ *
+ * Handlers decorated with `@Idempotent()` MUST finish well within the 60-second lock window.
+ * If an execution exceeds the lock window and is taken over by a newer request, completion
+ * fencing ensures the stale execution will not overwrite the newer execution's stored result.
  */
 @Injectable()
 export class IdempotencyInterceptor implements NestInterceptor {
+  private readonly logger = new Logger(IdempotencyInterceptor.name);
+
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: DatabaseClient,
     private readonly reflector: Reflector,
@@ -74,9 +93,15 @@ export class IdempotencyInterceptor implements NestInterceptor {
         expiresAt: sql`now() + interval '24 hours'`,
       })
       .onConflictDoNothing()
-      .returning();
+      .returning({
+        lockedUntilText: sql<string>`${idempotencyKeys.lockedUntil}::text`,
+      });
 
-    if (!inserted) {
+    let ownedLockedUntilText: string;
+
+    if (inserted) {
+      ownedLockedUntilText = inserted.lockedUntilText;
+    } else {
       // Step 2: Key already exists -> lock row FOR UPDATE in a transaction and resolve conflict
       const decision = await this.resolveConflict(scope, key, requestHash);
 
@@ -96,14 +121,24 @@ export class IdempotencyInterceptor implements NestInterceptor {
         res.status(decision.status);
         return of(decision.body);
       }
+
+      ownedLockedUntilText = decision.lockedUntilText;
     }
 
-    // Step 3: Run handler and store response or clean up on failure
+    const ownershipWhere = and(
+      eq(idempotencyKeys.scope, scope),
+      eq(idempotencyKeys.key, key),
+      eq(idempotencyKeys.state, 'in_progress'),
+      eq(idempotencyKeys.requestHash, requestHash),
+      sql`${idempotencyKeys.lockedUntil} = ${ownedLockedUntilText}::timestamptz`,
+    );
+
+    // Step 3: Run handler and store response or clean up on failure (fenced by ownership)
     return next.handle().pipe(
       switchMap(async (responseBody: unknown) => {
         const statusCode = res.statusCode || 200;
         if (statusCode < 500) {
-          await this.db
+          const updated = await this.db
             .update(idempotencyKeys)
             .set({
               responseStatus: statusCode,
@@ -111,21 +146,81 @@ export class IdempotencyInterceptor implements NestInterceptor {
               state: 'completed',
               updatedAt: sql`now()`,
             })
-            .where(and(eq(idempotencyKeys.scope, scope), eq(idempotencyKeys.key, key)));
+            .where(ownershipWhere)
+            .returning({ key: idempotencyKeys.key });
+
+          if (updated.length === 0) {
+            this.logger.warn(
+              JSON.stringify({
+                level: 'warn',
+                event: 'idempotency_fencing_lost',
+                scope,
+                key,
+              }),
+            );
+          }
         } else {
-          await this.db
+          const deleted = await this.db
             .delete(idempotencyKeys)
-            .where(and(eq(idempotencyKeys.scope, scope), eq(idempotencyKeys.key, key)));
+            .where(ownershipWhere)
+            .returning({ key: idempotencyKeys.key });
+
+          if (deleted.length === 0) {
+            this.logger.warn(
+              JSON.stringify({
+                level: 'warn',
+                event: 'idempotency_fencing_lost_on_5xx',
+                scope,
+                key,
+              }),
+            );
+          }
         }
         return responseBody;
       }),
       catchError(async (err: unknown) => {
-        await this.db
+        const deleted = await this.db
           .delete(idempotencyKeys)
-          .where(and(eq(idempotencyKeys.scope, scope), eq(idempotencyKeys.key, key)));
+          .where(ownershipWhere)
+          .returning({ key: idempotencyKeys.key });
+
+        if (deleted.length === 0) {
+          this.logger.warn(
+            JSON.stringify({
+              level: 'warn',
+              event: 'idempotency_fencing_lost_on_error',
+              scope,
+              key,
+            }),
+          );
+        }
         throw err;
       }),
     );
+  }
+
+  private async selectForUpdate(
+    tx: DatabaseClient,
+    scope: string,
+    key: string,
+  ): Promise<EvaluatedRow | undefined> {
+    const [row] = await tx
+      .select({
+        scope: idempotencyKeys.scope,
+        key: idempotencyKeys.key,
+        requestHash: idempotencyKeys.requestHash,
+        state: idempotencyKeys.state,
+        responseStatus: idempotencyKeys.responseStatus,
+        responseBody: idempotencyKeys.responseBody,
+        lockedUntilText: sql<string>`${idempotencyKeys.lockedUntil}::text`,
+        isExpired: sql<boolean>`${idempotencyKeys.expiresAt} < now()`,
+        isStale: sql<boolean>`${idempotencyKeys.lockedUntil} < now()`,
+      })
+      .from(idempotencyKeys)
+      .where(and(eq(idempotencyKeys.scope, scope), eq(idempotencyKeys.key, key)))
+      .for('update');
+
+    return row;
   }
 
   private async resolveConflict(
@@ -134,11 +229,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
     requestHash: string,
   ): Promise<ConflictDecision> {
     return await this.db.transaction(async (tx) => {
-      const [existing] = await tx
-        .select()
-        .from(idempotencyKeys)
-        .where(and(eq(idempotencyKeys.scope, scope), eq(idempotencyKeys.key, key)))
-        .for('update');
+      const existing = await this.selectForUpdate(tx, scope, key);
 
       if (!existing) {
         // Row was deleted between initial insert and select for update (e.g. failed attempt was cleared)
@@ -153,20 +244,17 @@ export class IdempotencyInterceptor implements NestInterceptor {
             expiresAt: sql`now() + interval '24 hours'`,
           })
           .onConflictDoNothing()
-          .returning();
+          .returning({
+            lockedUntilText: sql<string>`${idempotencyKeys.lockedUntil}::text`,
+          });
 
         if (reinserted) {
-          return { action: 'execute' };
+          return { action: 'execute', lockedUntilText: reinserted.lockedUntilText };
         }
 
-        const [retryRow] = await tx
-          .select()
-          .from(idempotencyKeys)
-          .where(and(eq(idempotencyKeys.scope, scope), eq(idempotencyKeys.key, key)))
-          .for('update');
-
+        const retryRow = await this.selectForUpdate(tx, scope, key);
         if (!retryRow) {
-          return { action: 'execute' };
+          return { action: 'error_409' };
         }
         return this.evaluateRow(retryRow, requestHash, scope, key, tx);
       }
@@ -176,19 +264,18 @@ export class IdempotencyInterceptor implements NestInterceptor {
   }
 
   private async evaluateRow(
-    existing: IdempotencyKey,
+    existing: EvaluatedRow,
     requestHash: string,
     scope: string,
     key: string,
     tx: DatabaseClient,
   ): Promise<ConflictDecision> {
-    const now = new Date();
-    const isExpired = existing.expiresAt < now;
-    const isStaleInProgress = existing.state === 'in_progress' && existing.lockedUntil < now;
+    const isExpired = existing.isExpired;
+    const isStaleInProgress = existing.state === 'in_progress' && existing.isStale;
 
     if (isExpired || isStaleInProgress) {
       // Take over: reset row to in_progress with new hash/lock, run handler
-      await tx
+      const [takenOver] = await tx
         .update(idempotencyKeys)
         .set({
           requestHash,
@@ -199,9 +286,16 @@ export class IdempotencyInterceptor implements NestInterceptor {
           expiresAt: sql`now() + interval '24 hours'`,
           updatedAt: sql`now()`,
         })
-        .where(and(eq(idempotencyKeys.scope, scope), eq(idempotencyKeys.key, key)));
+        .where(and(eq(idempotencyKeys.scope, scope), eq(idempotencyKeys.key, key)))
+        .returning({
+          lockedUntilText: sql<string>`${idempotencyKeys.lockedUntil}::text`,
+        });
 
-      return { action: 'execute' };
+      if (!takenOver) {
+        return { action: 'error_409' };
+      }
+
+      return { action: 'execute', lockedUntilText: takenOver.lockedUntilText };
     }
 
     if (existing.requestHash !== requestHash) {

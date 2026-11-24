@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "format:check": "prettier --check src"
+    "format:check": "prettier --check src test"
   },
   "dependencies": {
     "@internationalota/db": "workspace:*",

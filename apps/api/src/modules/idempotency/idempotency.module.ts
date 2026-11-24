@@ -1,24 +1,18 @@
 import { type DynamicModule, Module } from '@nestjs/common';
-import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { IdempotencyInterceptor } from './idempotency.interceptor.js';
-import { ProblemDetailsFilter } from './problem-details.filter.js';
 import { TestIdempotentCounterController } from './test-idempotent-counter.controller.js';
 
 @Module({
   controllers: process.env.NODE_ENV === 'test' ? [TestIdempotentCounterController] : [],
   providers: [
     IdempotencyInterceptor,
-    ProblemDetailsFilter,
     {
       provide: APP_INTERCEPTOR,
       useClass: IdempotencyInterceptor,
     },
-    {
-      provide: APP_FILTER,
-      useClass: ProblemDetailsFilter,
-    },
   ],
-  exports: [IdempotencyInterceptor, ProblemDetailsFilter],
+  exports: [IdempotencyInterceptor],
 })
 export class IdempotencyModule {
   static forRoot(): DynamicModule {

@@ -2,19 +2,58 @@ import { appMeta, type DatabaseClient, idempotencyKeys } from '@internationalota
 import type { INestApplication } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { and, eq, sql } from 'drizzle-orm';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { createTestDatabase, type TestDbInstance } from '../../../test/test-db.js';
 import { AppModule } from '../../app.module.js';
 import { DRIZZLE_DB } from '../../database/database.module.js';
+import { computeRequestHash } from './hash.js';
+import { testGate } from './test-idempotent-counter.controller.js';
+
+function closeTestGate(): () => void {
+  let release!: () => void;
+  testGate.holdFirst = true;
+  testGate.open = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  testGate.release = release;
+  return release;
+}
+
+function resetTestGate(): void {
+  testGate.holdFirst = false;
+  testGate.release();
+  testGate.open = Promise.resolve();
+  testGate.release = (): void => {};
+}
+
+async function waitForInProgressRow(
+  db: DatabaseClient,
+  key: string,
+  timeoutMs = 5000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const [row] = await db.select().from(idempotencyKeys).where(eq(idempotencyKeys.key, key));
+    if (row && row.state === 'in_progress') {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Timed out waiting for idempotency row "${key}" to reach state='in_progress'`);
+}
 
 describe('Idempotency module integration tests', () => {
   let app: INestApplication;
   let baseUrl: string;
   let db: DatabaseClient;
+  let testDb: TestDbInstance;
+  let previousDatabaseUrl: string | undefined;
 
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
-    process.env.DATABASE_URL =
-      process.env.DATABASE_URL || 'postgresql://ota_user:ota_password@localhost:55432/ota_dev';
+    previousDatabaseUrl = process.env.DATABASE_URL;
+    testDb = await createTestDatabase();
+    process.env.DATABASE_URL = testDb.testUrl;
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -27,23 +66,53 @@ describe('Idempotency module integration tests', () => {
   });
 
   afterAll(async () => {
+    resetTestGate();
     if (app) {
       await app.close();
+    }
+    if (previousDatabaseUrl === undefined) {
+      delete process.env.DATABASE_URL;
+    } else {
+      process.env.DATABASE_URL = previousDatabaseUrl;
+    }
+    if (testDb) {
+      await testDb.teardown();
     }
   });
 
   beforeEach(async () => {
-    // Clean up test rows in platform schema before each test
+    resetTestGate();
+    // Clean up test rows in the isolated temporary test database before each test
     await db.delete(idempotencyKeys);
     await db.delete(appMeta).where(eq(appMeta.key, 'test_idempotent_counter'));
   });
 
-  it('Criterion 1: Concurrency - 20 parallel requests increment counter exactly once', async () => {
+  afterEach(() => {
+    resetTestGate();
+  });
+
+  it('Criterion 1: Concurrency - 1 in-flight request holds gate while 19 parallel requests receive 409, then counter is 1 and retry replays', async () => {
     const key = 'test-concurrent-key-001';
     const payload = { action: 'increment', step: 1 };
 
-    // Fire 20 parallel requests simultaneously
-    const requests = Array.from({ length: 20 }, () =>
+    // 1. Create a closed gate so request #1 pauses inside the handler
+    const releaseGate = closeTestGate();
+
+    // 2. Fire request #1 (do not await yet)
+    const firstRequestPromise = fetch(`${baseUrl}/__test/idempotent-counter`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': key,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    // 3. Poll the DB until request #1's row is persisted with state='in_progress'
+    await waitForInProgressRow(db, key);
+
+    // 4. Fire the other 19 requests in parallel and await all of them
+    const concurrentRequests = Array.from({ length: 19 }, () =>
       fetch(`${baseUrl}/__test/idempotent-counter`, {
         method: 'POST',
         headers: {
@@ -54,42 +123,30 @@ describe('Idempotency module integration tests', () => {
       }),
     );
 
-    const responses = await Promise.all(requests);
+    const concurrentResponses = await Promise.all(concurrentRequests);
 
-    let original2xxCount = 0;
-    let replayCount = 0;
-    let conflict409Count = 0;
-
-    for (const res of responses) {
-      if (res.status === 201 || res.status === 200) {
-        const isReplay = res.headers.get('Idempotent-Replayed') === 'true';
-        if (isReplay) {
-          replayCount++;
-        } else {
-          original2xxCount++;
-        }
-        const data = (await res.json()) as { count: number };
-        expect(data.count).toBe(1);
-      } else if (res.status === 409) {
-        conflict409Count++;
-        expect(res.headers.get('Retry-After')).toBe('1');
-        expect(res.headers.get('Content-Type')).toContain('application/problem+json');
-        const problem = (await res.json()) as {
-          type: string;
-          title: string;
-          status: number;
-          detail: string;
-        };
-        expect(problem.status).toBe(409);
-        expect(problem.title).toBe('Conflict');
-      } else {
-        throw new Error(`Unexpected status code: ${res.status}`);
-      }
+    // 5. Assert ALL 19 received 409 Conflict with Retry-After: 1 and problem+json
+    for (const res of concurrentResponses) {
+      expect(res.status).toBe(409);
+      expect(res.headers.get('Retry-After')).toBe('1');
+      expect(res.headers.get('Content-Type')).toContain('application/problem+json');
+      const problem = (await res.json()) as {
+        type: string;
+        title: string;
+        status: number;
+        detail: string;
+      };
+      expect(problem.status).toBe(409);
+      expect(problem.title).toBe('Conflict');
     }
 
-    // Exactly one original execution took place
-    expect(original2xxCount).toBe(1);
-    expect(original2xxCount + replayCount + conflict409Count).toBe(20);
+    // 6. Release the gate and await request #1
+    releaseGate();
+    const firstRes = await firstRequestPromise;
+    expect(firstRes.status).toBe(201);
+    expect(firstRes.headers.get('Idempotent-Replayed')).toBeNull();
+    const firstBody = (await firstRes.json()) as { count: number };
+    expect(firstBody.count).toBe(1);
 
     // Verify database counter row was incremented exactly once
     const [counterRow] = await db
@@ -106,6 +163,26 @@ describe('Idempotency module integration tests', () => {
       .where(and(eq(idempotencyKeys.key, key)));
     expect(idempRow?.state).toBe('completed');
     expect(idempRow?.responseStatus).toBe(201);
+
+    // 7. Send one more request with the same key -> must replay and keep counter at 1
+    const replayRes = await fetch(`${baseUrl}/__test/idempotent-counter`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': key,
+      },
+      body: JSON.stringify(payload),
+    });
+    expect(replayRes.status).toBe(201);
+    expect(replayRes.headers.get('Idempotent-Replayed')).toBe('true');
+    const replayBody = (await replayRes.json()) as { count: number };
+    expect(replayBody).toEqual({ count: 1 });
+
+    const [counterAfterReplay] = await db
+      .select()
+      .from(appMeta)
+      .where(eq(appMeta.key, 'test_idempotent_counter'));
+    expect(((counterAfterReplay?.value as Record<string, unknown>)?.count as number) ?? 0).toBe(1);
   });
 
   it('Criterion 2: Sequential retry after completion returns replay header and leaves counter unchanged', async () => {
@@ -244,6 +321,14 @@ describe('Idempotency module integration tests', () => {
       body: JSON.stringify({ shouldFail: true }),
     });
     expect(failRes.status).toBe(500);
+    expect(failRes.headers.get('Content-Type')).toContain('application/problem+json');
+    const failProblem = (await failRes.json()) as {
+      type: string;
+      title: string;
+      status: number;
+      detail: string;
+    };
+    expect(failProblem.detail).toBe('An unexpected internal error occurred');
 
     // Verify row was deleted from platform.idempotency_keys
     const rows = await db.select().from(idempotencyKeys).where(eq(idempotencyKeys.key, key));
@@ -324,5 +409,112 @@ describe('Idempotency module integration tests', () => {
     expect(staleRes.headers.get('Idempotent-Replayed')).toBeNull();
     const staleData = (await staleRes.json()) as { count: number };
     expect(staleData.count).toBe(2);
+  });
+
+  it('G2: 5xx errors never leak internal Error messages to clients', async () => {
+    const key = 'test-secret-error-key-g2';
+
+    const res = await fetch(`${baseUrl}/__test/idempotent-counter`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': key,
+      },
+      body: JSON.stringify({ throwSecretError: true }),
+    });
+
+    expect(res.status).toBe(500);
+    expect(res.headers.get('Content-Type')).toContain('application/problem+json');
+    const rawText = await res.text();
+    expect(rawText).not.toContain('secret SQL detail');
+    expect(rawText).not.toContain('internal_secrets');
+
+    const problem = JSON.parse(rawText) as {
+      type: string;
+      title: string;
+      status: number;
+      detail: string;
+    };
+    expect(problem).toEqual({
+      type: 'https://httpstatuses.com/500',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'An unexpected internal error occurred',
+    });
+
+    // Row must also be deleted so the client can retry
+    const rows = await db.select().from(idempotencyKeys).where(eq(idempotencyKeys.key, key));
+    expect(rows).toHaveLength(0);
+  });
+
+  it('G5: Fencing on completion prevents a stale execution from overwriting a takeover execution', async () => {
+    const key = 'test-fencing-key-g5';
+    const scope = 'POST /__test/idempotent-counter';
+    const payload1 = { value: 1, useGate: true };
+    const payload2 = { value: 2, useGate: false };
+
+    // 1. Close gate and start execution #1
+    const releaseGate = closeTestGate();
+    const firstPromise = fetch(`${baseUrl}/__test/idempotent-counter`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': key,
+      },
+      body: JSON.stringify(payload1),
+    });
+
+    await waitForInProgressRow(db, key);
+
+    // 2. Simulate execution #1's 60s lock expiring while it is still running
+    await db
+      .update(idempotencyKeys)
+      .set({ lockedUntil: sql`now() - interval '10 seconds'` })
+      .where(and(eq(idempotencyKeys.scope, scope), eq(idempotencyKeys.key, key)));
+
+    // 3. Execution #2 arrives (bypassing testGate) -> takes over and completes with count = 1
+    const secondRes = await fetch(`${baseUrl}/__test/idempotent-counter`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': key,
+      },
+      body: JSON.stringify(payload2),
+    });
+    expect(secondRes.status).toBe(201);
+    expect(secondRes.headers.get('Idempotent-Replayed')).toBeNull();
+    const secondBody = (await secondRes.json()) as { count: number };
+    expect(secondBody).toEqual({ count: 1 });
+
+    // 4. Release gate so stale execution #1 finishes -> must return its own response as-is
+    //    (NOT replayed) and MUST NOT overwrite execution #2's completed row in DB
+    releaseGate();
+    const firstRes = await firstPromise;
+    expect(firstRes.status).toBe(201);
+    expect(firstRes.headers.get('Idempotent-Replayed')).toBeNull();
+    const firstBody = (await firstRes.json()) as { count: number };
+    expect(firstBody).toEqual({ count: 2 });
+
+    // 5. Verify DB row still stores execution #2's hash and responseBody ({ count: 1 })
+    const [storedRow] = await db
+      .select()
+      .from(idempotencyKeys)
+      .where(and(eq(idempotencyKeys.scope, scope), eq(idempotencyKeys.key, key)));
+    expect(storedRow?.state).toBe('completed');
+    expect(storedRow?.requestHash).toBe(computeRequestHash(scope, payload2));
+    expect(storedRow?.responseBody).toEqual({ count: 1 });
+
+    // 6. A subsequent retry with payload2 replays execution #2's stored response ({ count: 1 })
+    const replayRes = await fetch(`${baseUrl}/__test/idempotent-counter`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': key,
+      },
+      body: JSON.stringify(payload2),
+    });
+    expect(replayRes.status).toBe(201);
+    expect(replayRes.headers.get('Idempotent-Replayed')).toBe('true');
+    expect(await replayRes.json()).toEqual({ count: 1 });
   });
 });

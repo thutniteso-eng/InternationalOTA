@@ -6,8 +6,20 @@ import { Idempotent } from './idempotent.decorator.js';
 
 const COUNTER_KEY = 'test_idempotent_counter';
 
+/**
+ * Test-only gate controlled by integration tests to deterministically hold
+ * an in-flight request inside the handler while concurrent requests arrive.
+ */
+export const testGate = {
+  holdFirst: false,
+  open: Promise.resolve(),
+  release: (): void => {},
+};
+
 export interface IncrementCounterBody {
   shouldFail?: boolean;
+  throwSecretError?: boolean;
+  useGate?: boolean;
   value?: number;
   metadata?: Record<string, unknown>;
 }
@@ -23,6 +35,15 @@ export class TestIdempotentCounterController {
   @Post()
   @Idempotent()
   async incrementCounter(@Body() body?: IncrementCounterBody) {
+    if (body?.useGate !== false && testGate.holdFirst) {
+      testGate.holdFirst = false;
+      await testGate.open;
+    }
+
+    if (body?.throwSecretError) {
+      throw new Error('secret SQL detail: SELECT * FROM internal_secrets');
+    }
+
     if (body?.shouldFail) {
       throw new InternalServerErrorException('Simulated test failure inside idempotent handler');
     }
