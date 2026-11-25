@@ -14,9 +14,9 @@ Task status:
 | P1-03 DB foundation | DONE — merged (PR #3); D1–D3 fixed in P1-04 |
 | P1-04 Money, FX, time | DONE — merged (PR #5); E1–E3 fixed in P1-05 |
 | P1-05 Reference data | DONE — merged (PR #7) |
-| P1-06 Identity | ACCEPTED WITH LIMITATIONS (L1–L3 → P1-12, L4 product decision Phase 2) — awaiting merge of PR #12 |
+| P1-06 Identity | DONE — merged (PR #12); L1–L3 → P1-12, L4 Phase 2 decision |
 | P1-07 Idempotency-Key | DONE — merged (PR #9); H1 closed in P1-06 |
-| P1-08 Outbox / jobs / webhook inbox | READY — spec in implementation/tasks (after PR #12 merged) |
+| P1-08 Outbox / jobs / webhook inbox | READY — spec in implementation/tasks (ready now) |
 
 No application code exists yet.
 

@@ -22,7 +22,7 @@ New runtime dependency = must be named in the task spec or approved by Claude. A
 ## Git
 - Branch per task: `task/P1-01-monorepo-skeleton`. PR title: `[P1-01] <summary>`.
 - Conventional Commits (`feat:`, `fix:`, `chore:`, `test:`, `docs:`).
-- Only the Owner merges, and only PRs Claude marked ACCEPTED.
+- Merges: Claude squash-merges PRs it marked ACCEPTED once required checks are green (D-016); never bypass branch protection.
 
 ## Local ports (chosen to avoid clashing with other projects)
 web 3000 · api 4000 · PostgreSQL 55432 · Redis 56379

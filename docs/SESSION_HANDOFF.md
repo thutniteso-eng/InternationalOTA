@@ -5,6 +5,6 @@ Verified findings: see REPOSITORY_REGISTER.md (licences confirmed from LICENSE f
 Approved decisions: D-001, D-002, D-003, D-005, D-006, D-008, D-009, D-010. Pending: D-004, D-007.
 Files changed: all files in this folder (new). Tests: none run.
 Antigravity assignments: none.
-Exact next action: Owner merges PR #12 + this docs PR; Antigravity starts TASK-P1-08.
+Exact next action: Antigravity executes TASK-P1-08; Claude reviews and (per D-016) merges when accepted and green.
 Read next session: CLAUDE.md → CURRENT_STATE.md → NEXT_ACTIONS.md → DECISIONS.md.
 Environment note: session 1 ran in a cloud workspace; candidate repos were cloned there read-only. Not persistent on Owner's machine.

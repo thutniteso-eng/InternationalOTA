@@ -16,3 +16,4 @@
 - P1-07 re-reviewed at 0855621: ACCEPTED WITH LIMITATIONS (G1 mutation now killed; H1 same-payload fencing test → P1-06). Antigravity earlier reported a non-existent commit (c3f9a2e…); actual push was 0855621. GitHub Actions blocked by billing since 2026-11-24.
 - D-015 decided: repository public (experimental phase); history scanned clean of secrets.
 - P1-06 reviewed at 6d039bf: ACCEPTED WITH LIMITATIONS (6/6 mutations killed; L1–L3 → P1-12; L4 email verification before payment = Phase 2 decision). Approved upgrades: vitest 4.1, drizzle-kit 0.31, better-auth 1.7.28 exact. Branch protection now active (public repo). Added TASK-P1-08 spec.
+- P1-06 merged (PR #12). D-016: Owner delegated merging of Claude-ACCEPTED, CI-green PRs to Claude.
