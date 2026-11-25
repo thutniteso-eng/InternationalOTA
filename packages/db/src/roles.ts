@@ -32,7 +32,9 @@ export async function applyRuntimeRoleGrants(
   await db.execute(sql.raw(`GRANT USAGE ON SCHEMA public TO ${roleIdent};`));
 
   await db.execute(
-    sql.raw(`GRANT USAGE ON SCHEMA reference, identity, platform, finance TO ${roleIdent};`),
+    sql.raw(
+      `GRANT USAGE ON SCHEMA reference, identity, platform, finance, supply, catalog TO ${roleIdent};`,
+    ),
   );
   await db.execute(sql.raw(`GRANT SELECT ON ALL TABLES IN SCHEMA reference TO ${roleIdent};`));
   await db.execute(
@@ -46,6 +48,14 @@ export async function applyRuntimeRoleGrants(
     ),
   );
   await db.execute(
+    sql.raw(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA supply TO ${roleIdent};`),
+  );
+  await db.execute(
+    sql.raw(
+      `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA catalog TO ${roleIdent};`,
+    ),
+  );
+  await db.execute(
     sql.raw(`GRANT SELECT, INSERT, UPDATE ON TABLE finance.accounts TO ${roleIdent};`),
   );
   await db.execute(
@@ -55,10 +65,12 @@ export async function applyRuntimeRoleGrants(
   );
   await db.execute(
     sql.raw(
-      `GRANT USAGE ON ALL SEQUENCES IN SCHEMA reference, identity, platform, finance TO ${roleIdent};`,
+      `GRANT USAGE ON ALL SEQUENCES IN SCHEMA reference, identity, platform, finance, supply, catalog TO ${roleIdent};`,
     ),
   );
-  await db.execute(sql.raw(`GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA finance TO ${roleIdent};`));
+  await db.execute(
+    sql.raw(`GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA finance, catalog TO ${roleIdent};`),
+  );
 
   // Grant pgboss runtime permissions if pgboss schema has been installed
   const pgbossCheck = await db.execute(

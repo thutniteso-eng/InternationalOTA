@@ -27,9 +27,11 @@
     "db:migrate": "pnpm build && node dist/migrate.js",
     "db:seed": "pnpm build && node dist/seed.js",
     "identity:grant-role": "pnpm build && node dist/grant-role.js",
+    "catalog:fixtures": "pnpm build && node dist/fixtures.js",
     "generate:reference-data": "node --experimental-strip-types scripts/generate-reference-data.ts"
   },
   "dependencies": {
+    "@internationalota/shared": "workspace:*",
     "drizzle-orm": "^0.45.4",
     "pg": "^8.13.3",
     "uuidv7": "^1.0.2"

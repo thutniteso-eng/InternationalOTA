@@ -140,6 +140,8 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     let status: number = HttpStatus.INTERNAL_SERVER_ERROR;
     let detail = t(locale, 'http.500.detail');
     let title = t(locale, 'http.500.title');
+    let errorCode: string | undefined;
+    let missing: string[] | undefined;
 
     if (exception instanceof LedgerError) {
       const mapped = mapLedgerError(exception, locale);
@@ -160,6 +162,15 @@ export class ProblemDetailsFilter implements ExceptionFilter {
           rawDetail = res;
         } else if (typeof res === 'object' && res !== null) {
           const resObj = res as Record<string, unknown>;
+          if (typeof resObj['errorCode'] === 'string') {
+            errorCode = resObj['errorCode'];
+          }
+          if (
+            Array.isArray(resObj['missing']) &&
+            resObj['missing'].every((item) => typeof item === 'string')
+          ) {
+            missing = resObj['missing'];
+          }
           if (typeof resObj['i18nKey'] === 'string') {
             explicitKey = resObj['i18nKey'];
             if (typeof resObj['i18nParams'] === 'object' && resObj['i18nParams'] !== null) {
@@ -245,6 +256,8 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       title,
       status,
       detail,
+      ...(status < 500 && errorCode ? { code: errorCode, i18nKey: errorCode } : {}),
+      ...(status < 500 && missing ? { missing } : {}),
       ...(requestId ? { requestId } : {}),
     });
   }

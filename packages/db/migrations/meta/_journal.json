@@ -57,6 +57,20 @@
       "when": 1795601621772,
       "tag": "0007_watery_norman_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1795641208045,
+      "tag": "0008_pretty_nicolaos",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795643027474,
+      "tag": "0009_easy_machine_man",
+      "breakpoints": true
     }
   ]
 }

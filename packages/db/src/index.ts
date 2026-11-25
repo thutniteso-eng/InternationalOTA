@@ -17,6 +17,7 @@ export {
 export { uuidv7 } from 'uuidv7';
 export * from './client.ts';
 export * from './columns.ts';
+export * from './fixtures.ts';
 export * from './grant-role.ts';
 export * from './migrate.ts';
 export * from './roles.ts';

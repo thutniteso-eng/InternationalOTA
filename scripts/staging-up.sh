@@ -100,8 +100,8 @@ upsert_env_var "PUBLIC_BASE_URL" "$TUNNEL_URL"
 upsert_env_var "BETTER_AUTH_URL" "$TUNNEL_URL"
 upsert_env_var "AUTH_TRUSTED_ORIGINS" "$TUNNEL_URL"
 
-echo "Building staging images (api, web)..."
-docker compose -f "$COMPOSE_FILE" build api web
+echo "Building staging images (api, web, migrate)..."
+docker compose -f "$COMPOSE_FILE" build api web migrate
 
 echo "Starting postgres and waiting for health..."
 docker compose -f "$COMPOSE_FILE" up -d --no-deps --wait postgres

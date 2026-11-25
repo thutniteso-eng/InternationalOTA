@@ -1,25 +1,34 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import { ProblemDetailsFilter } from './common/http/problem-details.filter.js';
-import { LocaleService } from './common/i18n/locale.service.js';
+import { I18nModule } from './common/i18n/i18n.module.js';
 import { DatabaseModule } from './database/database.module.js';
 import { HealthController } from './health.controller.js';
+import { CatalogModule } from './modules/catalog/index.js';
 import { FinanceModule } from './modules/finance/index.js';
 import { IdempotencyModule } from './modules/idempotency/index.js';
 import { IdentityModule } from './modules/identity/index.js';
 import { MessagingModule } from './modules/messaging/index.js';
+import { SupplyModule } from './modules/supply/index.js';
 
 @Module({
-  imports: [DatabaseModule, IdentityModule, IdempotencyModule, MessagingModule, FinanceModule],
+  imports: [
+    DatabaseModule,
+    I18nModule,
+    IdentityModule,
+    IdempotencyModule,
+    MessagingModule,
+    FinanceModule,
+    SupplyModule,
+    CatalogModule,
+  ],
   controllers: [HealthController],
   providers: [
-    LocaleService,
     ProblemDetailsFilter,
     {
       provide: APP_FILTER,
       useClass: ProblemDetailsFilter,
     },
   ],
-  exports: [LocaleService],
 })
 export class AppModule {}

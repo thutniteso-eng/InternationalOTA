@@ -47,5 +47,21 @@
   "http.500.detail": "Đã xảy ra lỗi nội bộ ngoài ý muốn.",
   "http.502.title": "Lỗi cổng kết nối",
   "http.503.title": "Dịch vụ tạm thời không khả dụng",
-  "http.504.title": "Hết thời gian chờ cổng kết nối"
+  "http.504.title": "Hết thời gian chờ cổng kết nối",
+  "supply.notFound": "Không tìm thấy nhà cung cấp.",
+  "supply.invalidCountry": "Mã quốc gia ISO 3166-1 không hợp lệ ({countryAlpha2}).",
+  "supply.validation": "Dữ liệu nhà cung cấp không hợp lệ: {reason}.",
+  "catalog.product.notFound": "Không tìm thấy sản phẩm.",
+  "catalog.supplier.notFound": "Không tìm thấy nhà cung cấp được tham chiếu.",
+  "catalog.translation.invalidLocale": "Ngôn ngữ \"{locale}\" chưa được kích hoạt.",
+  "catalog.translation.invalidSlug": "Slug chỉ được chứa chữ thường không dấu, số và dấu gạch nối.",
+  "catalog.translation.slugConflict": "Slug \"{slug}\" đã được sử dụng cho ngôn ngữ \"{locale}\".",
+  "catalog.images.tooMany": "Mỗi sản phẩm chỉ được có tối đa 20 hình ảnh.",
+  "catalog.images.invalidUrl": "URL hình ảnh phải sử dụng giao thức HTTPS.",
+  "catalog.query.invalidParams": "Tham số tìm kiếm danh mục không hợp lệ: {reason}.",
+  "catalog.publish.supplierSuspended": "Không thể xuất bản sản phẩm khi nhà cung cấp đang bị tạm ngưng.",
+  "catalog.publish.missingTranslations": "Không thể xuất bản sản phẩm: thiếu hoặc chưa đủ bản dịch bắt buộc ({locales}).",
+  "catalog.publish.missingLocation": "Không thể xuất bản sản phẩm: thiếu tọa độ vị trí.",
+  "catalog.publish.missingTimeZone": "Không thể xuất bản sản phẩm: thiếu múi giờ IANA hợp lệ.",
+  "catalog.publish.blocked": "Không thể xuất bản sản phẩm vì thiếu điều kiện: {reasons}."
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "catalog"."products" ADD CONSTRAINT "products_published_location_check" CHECK (status <> 'published' OR location IS NOT NULL);
