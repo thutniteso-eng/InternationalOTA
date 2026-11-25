@@ -458,8 +458,15 @@ describe('Idempotency module integration tests', () => {
       title: string;
       status: number;
       detail: string;
+      requestId?: string;
     };
-    expect(problem).toEqual({
+    expect(problem.requestId).toBeTruthy();
+    expect({
+      type: problem.type,
+      title: problem.title,
+      status: problem.status,
+      detail: problem.detail,
+    }).toEqual({
       type: 'https://httpstatuses.com/500',
       title: 'Internal Server Error',
       status: 500,

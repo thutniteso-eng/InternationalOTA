@@ -1,11 +1,17 @@
+import './tracing.js';
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module.js';
 import { configureApp } from './app.setup.js';
+import { createPinoLogger, PinoNestLogger } from './common/observability/logger.js';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { bodyParser: false });
-  configureApp(app);
+  const pinoLogger = createPinoLogger();
+  const app = await NestFactory.create(AppModule, {
+    bodyParser: false,
+    logger: new PinoNestLogger(pinoLogger),
+  });
+  configureApp(app, { logger: pinoLogger });
   app.enableShutdownHooks();
 
   const port = Number(process.env['API_PORT'] || 4000);

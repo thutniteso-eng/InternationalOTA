@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { getRequestId } from '../observability/request-context.js';
 
 const GENERIC_INTERNAL_ERROR_DETAIL = 'An unexpected internal error occurred';
 
@@ -38,8 +39,14 @@ export class ProblemDetailsFilter implements ExceptionFilter {
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
-    const request = ctx.getRequest<{ path?: string; url?: string; method?: string }>();
+    const request = ctx.getRequest<{
+      path?: string;
+      url?: string;
+      method?: string;
+      requestId?: string;
+    }>();
     const response = ctx.getResponse<Response>();
+    const requestId = request.requestId ?? getRequestId();
 
     let status: number = HttpStatus.INTERNAL_SERVER_ERROR;
     let detail = GENERIC_INTERNAL_ERROR_DETAIL;
@@ -81,6 +88,7 @@ export class ProblemDetailsFilter implements ExceptionFilter {
         JSON.stringify({
           level: 'error',
           event: 'http_server_error',
+          requestId,
           status,
           method: request.method,
           path: request.url ?? request.path,
@@ -103,6 +111,7 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       title,
       status,
       detail,
+      ...(requestId ? { requestId } : {}),
     });
   }
 }

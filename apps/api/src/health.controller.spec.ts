@@ -95,8 +95,15 @@ describe('HealthController (HTTP)', () => {
         title: string;
         status: number;
         detail: string;
+        requestId?: string;
       };
-      expect(body).toEqual({
+      expect(body.requestId).toBeTruthy();
+      expect({
+        type: body.type,
+        title: body.title,
+        status: body.status,
+        detail: body.detail,
+      }).toEqual({
         type: 'https://httpstatuses.com/503',
         title: 'Service Unavailable',
         status: 503,

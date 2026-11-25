@@ -173,6 +173,15 @@ export class InboxService {
                 eq(inboxMessages.providerEventId, message.providerEventId),
               ),
             );
+
+          this.logger.log(
+            JSON.stringify({
+              event: 'inbox_message_processed',
+              provider: message.provider,
+              providerEventId: message.providerEventId,
+              attempt: message.attempts + 1,
+            }),
+          );
         } catch (err: unknown) {
           const nextAttempts = message.attempts + 1;
           const errorMessage = err instanceof Error ? err.message : String(err);
