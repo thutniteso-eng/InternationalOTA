@@ -55,6 +55,9 @@ export const financeJournalEntries = financeSchema.table(
     reversesEntryId: uuid('reverses_entry_id').references(
       (): AnyPgColumn => financeJournalEntries.id,
     ),
+    createdTxid: bigint('created_txid', { mode: 'bigint' })
+      .notNull()
+      .default(sql`txid_current()`),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

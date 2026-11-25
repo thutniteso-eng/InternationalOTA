@@ -126,3 +126,27 @@ Real results (all commands exited `0`):
 ## Remaining risks
 
 - None. All acceptance criteria (AC1–AC9) are verified with deterministic integration tests on isolated temporary PostgreSQL databases.
+
+---
+
+## Corrections (K1–K3)
+
+Following the PR #16 review of commit `80147c7`, all three blocking items (K1–K3) were addressed via forward-only migration `packages/db/migrations/0007_watery_norman_osborn.sql`:
+
+### K1 — Prevent appending lines to an already-committed journal entry
+- **Change**:
+  - Added `created_txid bigint NOT NULL DEFAULT txid_current()` to `finance.journal_entries` (`packages/db/src/schema/finance.ts` + migration `0007_watery_norman_osborn.sql`).
+  - Added `BEFORE INSERT ON finance.journal_lines FOR EACH ROW` trigger `trg_journal_lines_same_tx` (`finance.trg_fn_journal_lines_same_tx()`) that rejects any line insert where `journal_entries.created_txid <> txid_current()`.
+- **Evidence**: Added automated raw-SQL probe test `K1: Appending a balanced debit/credit pair to a previously committed entry in a later transaction is rejected` in `apps/api/src/modules/finance/ledger.spec.ts` — inserting a balanced 9,999,999 VND pair into an earlier committed entry fails with `Cannot append journal lines to committed entry ... in a later transaction` and the entry retains exactly 2 lines.
+
+### K2 — Block `TRUNCATE` on `finance.journal_entries` and `finance.journal_lines`
+- **Change**:
+  - Added `BEFORE TRUNCATE ... FOR EACH STATEMENT` triggers `trg_journal_entries_no_truncate` and `trg_journal_lines_no_truncate` calling `finance.trg_fn_prevent_ledger_mutation()` in migration `0007_watery_norman_osborn.sql`.
+  - Test harness uses isolated temporary databases (drop/recreate), never `TRUNCATE`.
+- **Evidence**: Added automated raw-SQL probe test `K2: TRUNCATE on finance.journal_lines and finance.journal_entries is rejected` in `ledger.spec.ts` — both `TRUNCATE finance.journal_lines CASCADE` and `TRUNCATE finance.journal_entries CASCADE` fail with `is immutable` and existing entries remain intact.
+
+### K3 — Make `finance.accounts.currency` and `finance.accounts.type` immutable
+- **Change**:
+  - Added `BEFORE UPDATE ON finance.accounts FOR EACH ROW` trigger `trg_accounts_immutable_type_currency` (`finance.trg_fn_accounts_immutable_type_currency()`) in migration `0007_watery_norman_osborn.sql` raising an exception if `currency` or `type` is modified, while keeping `name` and `is_active` editable.
+- **Evidence**: Added automated raw-SQL probe test `K3: accounts.currency and accounts.type are immutable while name and is_active remain editable` in `ledger.spec.ts` — updating `currency` or `type` fails (`currency is immutable` / `type is immutable`), while updating `name` and `is_active` succeeds.
+

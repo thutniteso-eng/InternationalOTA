@@ -501,4 +501,102 @@ describe('Double-entry ledger integration tests (P1-09)', () => {
       ),
     ).rejects.toThrow(LedgerConflictError);
   });
+
+  it('K1: Appending a balanced debit/credit pair to a previously committed entry in a later transaction is rejected', async () => {
+    const posted = await db.transaction((tx) =>
+      ledger.post(tx, {
+        effectiveDate: '2026-11-25',
+        description: 'Committed entry for K1 append probe',
+        sourceType: 'test',
+        sourceId: 'k1-append-1',
+        entryKind: 'capture',
+        lines: [
+          {
+            accountId: acctId('psp_clearing_vnd'),
+            side: 'debit',
+            amount: createMoney(100_000n, 'VND'),
+          },
+          {
+            accountId: acctId('customer_deposits_vnd'),
+            side: 'credit',
+            amount: createMoney(100_000n, 'VND'),
+          },
+        ],
+      }),
+    );
+
+    const extraLine1 = '019a0000-0000-7000-8000-000000000091';
+    const extraLine2 = '019a0000-0000-7000-8000-000000000092';
+
+    await expectPgError(
+      db.transaction(async (tx) => {
+        await tx.execute(sql`
+          INSERT INTO finance.journal_lines (id, entry_id, account_id, currency, debit_minor, credit_minor)
+          VALUES
+            (${extraLine1}::uuid, ${posted.entry.id}::uuid, ${acctId('psp_clearing_vnd')}::uuid, 'VND', 9999999, 0),
+            (${extraLine2}::uuid, ${posted.entry.id}::uuid, ${acctId('customer_deposits_vnd')}::uuid, 'VND', 0, 9999999)
+        `);
+      }),
+      /later transaction/i,
+    );
+
+    const lines = await db
+      .select()
+      .from(financeJournalLines)
+      .where(eq(financeJournalLines.entryId, posted.entry.id));
+    expect(lines).toHaveLength(2);
+  });
+
+  it('K2: TRUNCATE on finance.journal_lines and finance.journal_entries is rejected', async () => {
+    await expectPgError(db.execute(sql`TRUNCATE finance.journal_lines CASCADE`), /immutable/i);
+
+    await expectPgError(db.execute(sql`TRUNCATE finance.journal_entries CASCADE`), /immutable/i);
+
+    const entries = await db.select().from(financeJournalEntries);
+    expect(entries.length).toBeGreaterThan(0);
+  });
+
+  it('K3: accounts.currency and accounts.type are immutable while name and is_active remain editable', async () => {
+    const vndClearingId = acctId('psp_clearing_vnd');
+
+    await expectPgError(
+      db.execute(sql`
+        UPDATE finance.accounts SET currency = 'USD' WHERE id = ${vndClearingId}::uuid
+      `),
+      /currency is immutable/i,
+    );
+
+    await expectPgError(
+      db.execute(sql`
+        UPDATE finance.accounts SET type = 'revenue' WHERE id = ${vndClearingId}::uuid
+      `),
+      /type is immutable/i,
+    );
+
+    // Create a temporary account to verify name and is_active remain editable
+    const [tempAccount] = await db
+      .insert(financeAccounts)
+      .values({
+        code: 'temp_editable_vnd',
+        name: 'Temp Editable Account',
+        type: 'asset',
+        currency: 'VND',
+        isActive: true,
+      })
+      .returning();
+
+    await db
+      .update(financeAccounts)
+      .set({ name: 'Temp Editable Account (Renamed)', isActive: false })
+      .where(eq(financeAccounts.id, tempAccount!.id));
+
+    const [updated] = await db
+      .select()
+      .from(financeAccounts)
+      .where(eq(financeAccounts.id, tempAccount!.id));
+    expect(updated?.name).toBe('Temp Editable Account (Renamed)');
+    expect(updated?.isActive).toBe(false);
+    expect(updated?.currency).toBe('VND');
+    expect(updated?.type).toBe('asset');
+  });
 });
