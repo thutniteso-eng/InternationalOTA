@@ -14,11 +14,14 @@ Task status:
 | P1-03 DB foundation | DONE — merged (PR #3); D1–D3 fixed in P1-04 |
 | P1-04 Money, FX, time | DONE — merged (PR #5); E1–E3 fixed in P1-05 |
 | P1-05 Reference data | DONE — merged (PR #7) |
-| P1-06 Identity | READY — spec in implementation/tasks (start after P1-07 merged) |
-| P1-07 Idempotency-Key | ACCEPTED WITH LIMITATIONS (H1 → P1-06) — verified locally; GitHub CI blocked by billing; awaiting Owner merge of PR #9 |
+| P1-06 Identity | DONE — merged (PR #12); L1–L3 → P1-12, L4 Phase 2 decision |
+| P1-07 Idempotency-Key | DONE — merged (PR #9); H1 closed in P1-06 |
+| P1-08 Outbox / jobs / webhook inbox | READY — spec in implementation/tasks (ready now) |
 
 No application code exists yet.
 
 Note: GitHub branch protection / rulesets are NOT available for private repos on the free plan (API returned 403 "Upgrade to GitHub Pro"). Owner decided D-014 = no upgrade for now; merges rely on the rule "only PRs Claude marked ACCEPTED, with green CI".
 
-Note (2026-11-25): GitHub Actions refuses to start jobs — "recent account payments have failed or spending limit needs to be increased". Owner to check Billing. Until fixed, Claude verifies locally and records it in each review.
+Note (2026-11-25): repository made public (D-015); GitHub Actions runs again; branch protection on `main` active (required checks `verify`, `security`, no approvals, no force push).
+
+Carry-overs for P1-12 (staging): from P1-06 review — L1 trusted proxy/client IP for rate limiting, L2 fail-fast on missing auth base URL / trusted origins outside local dev, L3 Secure cookies derived from base URL scheme.
