@@ -68,7 +68,35 @@ EXIT_CODE=1
 
 ## Fresh-Clone Verification
 
-Will be populated with real outputs from `/tmp/p1check-p110` immediately after pushing branch `task/P1-10-observability`.
+Verified in a fresh clone of `task/P1-10-observability` at `/tmp/p1check-p110` (commit `51847bf03e66fe3bdd6f71a051429b3216eb5706`):
+
+```bash
+rm -rf /tmp/p1check-p110
+git clone -b task/P1-10-observability https://github.com/thutniteso-eng/InternationalOTA.git /tmp/p1check-p110
+cd /tmp/p1check-p110
+pnpm install --frozen-lockfile
+pnpm format:check
+pnpm lint
+pnpm lint:boundaries
+pnpm typecheck
+pnpm build
+DATABASE_URL="postgresql://ota_user:ota_password@localhost:55432/ota_dev" pnpm db:migrate
+DATABASE_URL="postgresql://ota_user:ota_password@localhost:55432/ota_dev" pnpm db:seed
+DATABASE_URL="postgresql://ota_user:ota_password@localhost:55432/ota_dev" pnpm test
+pnpm licenses:check
+pnpm audit --prod --audit-level high
+```
+
+Real results (all commands exited `0`):
+- `pnpm format:check`: `All matched files use Prettier code style!` across all 6 workspace projects + `tools/`.
+- `pnpm lint`: all 6 workspace projects + `eslint tools` passed with 0 errors (including `no-console` guard).
+- `pnpm lint:boundaries`: `✔ no dependency violations found (77 modules, 250 dependencies cruised)`.
+- `pnpm typecheck` & `pnpm build`: all 6 workspace projects built and typechecked cleanly.
+- `pnpm test` (Vitest `4.1.12`):
+  - `apps/api`: `Test Files  8 passed (8)` / `Tests  57 passed (57)` (`observability.spec.ts` 5 covering AC1–AC5, `tracing.spec.ts` 1 covering AC6, plus all existing suites passing unchanged with tracing disabled for AC7).
+  - `packages/db`: 22 passed; `packages/money`: 41 passed; `packages/time`: 19 passed; `packages/shared`: passed; `apps/web`: 1 passed; `tools`: 16 passed.
+- `pnpm licenses:check`: `✅ All 467 package licenses verified successfully.`
+- `pnpm audit --prod --audit-level high`: exited `0` (0 high, 0 critical; 1 moderate).
 
 ---
 
