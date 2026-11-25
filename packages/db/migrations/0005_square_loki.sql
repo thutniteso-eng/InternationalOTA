@@ -1,0 +1,1 @@
+ALTER TABLE "platform"."inbox_messages" ADD COLUMN "raw_body" text NOT NULL;

@@ -573,4 +573,113 @@ describe('Messaging module integration tests (P1-08)', () => {
     expect(row1?.publishedAt).not.toBeNull();
     expect(row2?.publishedAt).toBeNull();
   });
+
+  it('W1 & W4: Replay with 3 different X-Webhook-Id headers deduplicates to 1 row using signed body id and preserves exact raw_body', async () => {
+    const handledIds: string[] = [];
+    inboxService.registerHandler('test', (msg) => {
+      handledIds.push(msg.providerEventId);
+      return Promise.resolve();
+    });
+
+    // Deliberately non-canonical key order and whitespace to prove raw_body is stored verbatim
+    const rawSignedBody = '{  "z_field": 1,  "id": "evt-signed-dedup-1",  "a_field": "keep"  }';
+    const signature = signWebhookBody(rawSignedBody);
+
+    for (const headerId of ['a-1', 'a-2', 'a-3']) {
+      const res = await fetch(`${baseUrl}/webhooks/test`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Webhook-Signature': signature,
+          'X-Webhook-Id': headerId,
+        },
+        body: rawSignedBody,
+      });
+      expect(res.status).toBe(200);
+    }
+
+    const rows = await db.select().from(inboxMessages);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.providerEventId).toBe('evt-signed-dedup-1');
+    // W4: exact raw bytes preserved verbatim alongside parsed jsonb payload
+    expect(rows[0]?.rawBody).toBe(rawSignedBody);
+    expect(rows[0]?.payload).toEqual({ z_field: 1, id: 'evt-signed-dedup-1', a_field: 'keep' });
+
+    expect(await inboxService.relayBatch()).toBe(1);
+    expect(handledIds).toEqual(['evt-signed-dedup-1']);
+  });
+
+  it('W2: Oversized webhook body (> 1 MiB default and env-configured cap) returns 413 problem+json and stores no row', async () => {
+    // 1. Default 1 MiB cap: send 1.2 MiB payload
+    const largePayload = JSON.stringify({
+      id: 'evt-too-large-default',
+      padding: 'x'.repeat(1_200_000),
+    });
+    const largeSig = signWebhookBody(largePayload);
+
+    const largeRes = await fetch(`${baseUrl}/webhooks/test`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Webhook-Signature': largeSig,
+      },
+      body: largePayload,
+    });
+    expect(largeRes.status).toBe(413);
+    expect(largeRes.headers.get('Content-Type')).toContain('application/problem+json');
+    const problem = (await largeRes.json()) as { status: number; title: string; type: string };
+    expect(problem.status).toBe(413);
+    expect(problem.title).toBe('Payload Too Large');
+    expect(problem.type).toBe('https://httpstatuses.com/413');
+
+    // 2. Env-configurable cap via WEBHOOK_MAX_BODY_BYTES
+    const prevLimit = process.env['WEBHOOK_MAX_BODY_BYTES'];
+    process.env['WEBHOOK_MAX_BODY_BYTES'] = '64';
+    try {
+      const overCustomCap = JSON.stringify({
+        id: 'evt-too-large-custom',
+        data: 'a'.repeat(100),
+      });
+      const customRes = await fetch(`${baseUrl}/webhooks/test`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Webhook-Signature': signWebhookBody(overCustomCap),
+        },
+        body: overCustomCap,
+      });
+      expect(customRes.status).toBe(413);
+      expect(customRes.headers.get('Content-Type')).toContain('application/problem+json');
+    } finally {
+      if (prevLimit === undefined) {
+        delete process.env['WEBHOOK_MAX_BODY_BYTES'];
+      } else {
+        process.env['WEBHOOK_MAX_BODY_BYTES'] = prevLimit;
+      }
+    }
+
+    // No inbox rows were stored for either rejected request
+    const rows = await db.select().from(inboxMessages);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('W3: "test" webhook provider is not registered when NODE_ENV === "production"', async () => {
+    const prevNodeEnv = process.env['NODE_ENV'];
+    process.env['NODE_ENV'] = 'production';
+    try {
+      const prodInbox = new InboxService(db);
+      const body = Buffer.from('{"id":"evt-prod-test"}', 'utf8');
+      await expect(
+        prodInbox.receiveWebhook('test', body, {
+          'x-webhook-signature': signWebhookBody(body.toString('utf8')),
+        }),
+      ).rejects.toThrow(/Unknown webhook provider: test/);
+    } finally {
+      if (prevNodeEnv === undefined) {
+        delete process.env['NODE_ENV'];
+      } else {
+        process.env['NODE_ENV'] = prevNodeEnv;
+      }
+    }
+  });
 });

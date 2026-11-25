@@ -135,3 +135,34 @@ Real results (all commands exited `0`):
 ## Remaining risks
 
 - None. All acceptance criteria (AC1–AC8) are verified with deterministic integration tests on isolated temporary PostgreSQL databases.
+
+---
+
+## Corrections (W1–W5)
+
+Following the PR #14 review of commit `2b2c4ce`, all five items (W1–W5) were addressed:
+
+### W1 — Deduplication key derived exclusively from signed content
+- **Change**: Updated `TestHmacWebhookVerifier.verify()` (`apps/api/src/modules/messaging/test-webhook.verifier.ts`) to remove all reliance on the unsigned `X-Webhook-Id` header and extract `eventId` exclusively from the HMAC-signed JSON body (`payload.id`).
+- **Evidence**: Added test `W1 & W4: Replay with 3 different X-Webhook-Id headers deduplicates to 1 row using signed body id and preserves exact raw_body` in `apps/api/src/modules/messaging/messaging.spec.ts`. Sending the same validly signed body 3× with `X-Webhook-Id: a-1`, `a-2`, `a-3` returns `200` for all 3 requests, creates exactly **1** row in `platform.inbox_messages` (`provider_event_id = 'evt-signed-dedup-1'`), and invokes the handler once.
+
+### W2 — Size-capped webhook body reader (413 problem+json)
+- **Change**:
+  - Updated `/webhooks` raw-body middleware in `apps/api/src/app.setup.ts` to enforce a maximum body size (`WEBHOOK_MAX_BODY_BYTES`, default `1_048_576` bytes = 1 MiB) on both declared `Content-Length` and streamed bytes. As soon as the limit is exceeded, the middleware stops buffering, pauses the stream, and returns `413 Payload Too Large` (`application/problem+json`) with no DB write.
+  - Added `HttpStatus.PAYLOAD_TOO_LARGE` (`'Payload Too Large'`) to `STATUS_TITLES` in `apps/api/src/common/http/problem-details.filter.ts`.
+- **Evidence**: Added test `W2: Oversized webhook body (> 1 MiB default and env-configured cap) returns 413 problem+json and stores no row` in `messaging.spec.ts` proving both the 1 MiB default cap (1.2 MiB payload -> 413 `application/problem+json`) and custom `WEBHOOK_MAX_BODY_BYTES=64` cap return 413 with 0 rows stored.
+
+### W3 — Register `test` webhook provider only outside production
+- **Change**: Guarded `TestHmacWebhookVerifier` registration in `InboxService` constructor (`apps/api/src/modules/messaging/inbox.service.ts`) with `if (process.env['NODE_ENV'] !== 'production')`.
+- **Evidence**: Added test `W3: "test" webhook provider is not registered when NODE_ENV === "production"` in `messaging.spec.ts` proving `receiveWebhook('test', ...)` rejects with `NotFoundException` (`Unknown webhook provider: test`) when `NODE_ENV=production`.
+
+### W4 — Store exact raw body as received alongside parsed `payload`
+- **Change**:
+  - Added `raw_body text NOT NULL` column to `platform.inbox_messages` in `packages/db/src/schema/platform.ts`.
+  - Generated forward-only migration `packages/db/migrations/0005_square_loki.sql` (`ALTER TABLE "platform"."inbox_messages" ADD COLUMN "raw_body" text NOT NULL;`).
+  - Updated `InboxService.receiveWebhook()` to store `rawBody: rawBody.toString('utf8')` verbatim alongside `payload: verified.payload`.
+- **Evidence**: Test `W1 & W4` sends non-canonical JSON with extra whitespace and key order (`{  "z_field": 1,  "id": "evt-signed-dedup-1",  "a_field": "keep"  }`) and asserts `row.rawBody` equals the exact original string while `row.payload` holds the parsed JSON object.
+
+### W5 — Document signed timestamp / replay-window requirement for real providers
+- **Change**: Added JSDoc security requirements on `WebhookVerifier` (`apps/api/src/modules/messaging/messaging.types.ts`) and `TestHmacWebhookVerifier` (`apps/api/src/modules/messaging/test-webhook.verifier.ts`) documenting that real production provider adapters MUST verify a provider-signed timestamp and enforce a bounded replay window in addition to raw-body HMAC verification.
+

@@ -4,8 +4,18 @@ import { UnauthorizedException } from '@nestjs/common';
 import type { WebhookVerificationResult, WebhookVerifier } from './messaging.types.js';
 
 /**
- * Test webhook verifier using HMAC-SHA256 over the raw request bytes
- * with constant-time signature comparison and secret from `WEBHOOK_TEST_SECRET`.
+ * Test-only webhook verifier (registered only when `NODE_ENV !== 'production'`).
+ *
+ * Uses HMAC-SHA256 over the raw request bytes with constant-time signature
+ * comparison and secret from `WEBHOOK_TEST_SECRET`.
+ *
+ * The deduplication `eventId` is extracted exclusively from the signed JSON
+ * body (`payload.id`) — never from unsigned headers — so an attacker cannot
+ * bypass deduplication by varying unauthenticated headers.
+ *
+ * Note: Real provider adapters (Stripe, Momo, VNPay, suppliers) MUST also
+ * verify a signed timestamp and enforce a replay window (not required for
+ * this `test` fixture).
  */
 export class TestHmacWebhookVerifier implements WebhookVerifier {
   readonly provider = 'test';
@@ -48,17 +58,11 @@ export class TestHmacWebhookVerifier implements WebhookVerifier {
     }
 
     const payload = parsed as Record<string, unknown>;
-    const headerEventId = headers['x-webhook-id'];
     const bodyEventId = payload['id'];
-    const eventId =
-      typeof headerEventId === 'string' && headerEventId.length > 0
-        ? headerEventId
-        : typeof bodyEventId === 'string' && bodyEventId.length > 0
-          ? bodyEventId
-          : null;
+    const eventId = typeof bodyEventId === 'string' && bodyEventId.length > 0 ? bodyEventId : null;
 
     if (!eventId) {
-      throw new UnauthorizedException('Webhook event ID is required');
+      throw new UnauthorizedException('Signed webhook body must contain a non-empty string "id"');
     }
 
     return { eventId, payload };

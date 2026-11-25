@@ -46,7 +46,9 @@ export class InboxService {
   private shuttingDown = false;
 
   constructor(@Inject(DRIZZLE_DB) private readonly db: DatabaseClient) {
-    this.registerVerifier(new TestHmacWebhookVerifier());
+    if (process.env['NODE_ENV'] !== 'production') {
+      this.registerVerifier(new TestHmacWebhookVerifier());
+    }
   }
 
   registerVerifier(verifier: WebhookVerifier): void {
@@ -105,6 +107,7 @@ export class InboxService {
       .values({
         provider,
         providerEventId: verified.eventId,
+        rawBody: rawBody.toString('utf8'),
         payload: verified.payload,
       })
       .onConflictDoNothing()

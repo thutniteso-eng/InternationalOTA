@@ -28,6 +28,17 @@ export interface WebhookVerificationResult {
   payload: Record<string, unknown>;
 }
 
+/**
+ * Verifies an incoming webhook request for a specific external provider.
+ *
+ * Security requirements for real production provider adapters:
+ * 1. Signature verification MUST run against the exact raw request bytes (`rawBody`).
+ * 2. The deduplication `eventId` MUST be derived exclusively from cryptographically
+ *    signed content (never from an unsigned header).
+ * 3. Real provider adapters MUST also verify a provider-signed timestamp and enforce
+ *    a bounded replay window (e.g. reject events older than 5 minutes) to prevent
+ *    replay of captured historical requests.
+ */
 export interface WebhookVerifier {
   readonly provider: string;
   verify(rawBody: Buffer, headers: IncomingHttpHeaders): WebhookVerificationResult;

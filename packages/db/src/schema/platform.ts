@@ -67,6 +67,7 @@ export const inboxMessages = platformSchema.table(
   {
     provider: text('provider').notNull(),
     providerEventId: text('provider_event_id').notNull(),
+    rawBody: text('raw_body').notNull(),
     payload: jsonb('payload').notNull(),
     receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
     processedAt: timestamp('processed_at', { withTimezone: true }),
