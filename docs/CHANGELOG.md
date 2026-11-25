@@ -20,3 +20,4 @@
 - P1-08 merged (PR #14) after W1 (unsigned header dedupe bypass) and W2 (unbounded body) were proven and fixed. Added TASK-P1-09 spec.
 - P1-09 merged (PR #16) after K1 (append to old entry), K2 (TRUNCATE), K3 (account currency change) were proven and fixed. Added TASK-P1-10 spec.
 - P1-10 merged (PR #18): DB-error parameter leak (O1) and shallow redaction (O2) fixed; regression O4 (errors logged as [object Object]) caught and fixed. Claude's O3 finding was a misread. Added TASK-P1-11 spec.
+- P1-11 merged (PR #20) with limitations I1 (duplicate exponent table, caused by Claude's spec asking for KWD) and I2 (message-matching i18n). D-017 staging on Owner's WSL + Cloudflare quick tunnel. Added TASK-P1-12 spec (closes L1–L3, P1-09 roles, I1–I2).

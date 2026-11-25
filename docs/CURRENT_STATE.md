@@ -19,7 +19,8 @@ Task status:
 | P1-08 Outbox / jobs / webhook inbox | DONE — merged (PR #14) after W1–W5 corrections |
 | P1-09 Double-entry ledger | DONE — merged (PR #16) after K1–K3 corrections |
 | P1-10 Observability | DONE — merged (PR #18) after O1, O2, O4 corrections |
-| P1-11 i18n foundation | READY — spec in implementation/tasks |
+| P1-11 i18n foundation | DONE — merged (PR #20); I1–I2 → P1-12 |
+| P1-12 Staging (WSL + Cloudflare tunnel) | READY — spec in implementation/tasks; closes all carry-overs |
 
 No application code exists yet.
 
@@ -27,4 +28,4 @@ Note: GitHub branch protection / rulesets are NOT available for private repos on
 
 Note (2026-11-25): repository made public (D-015); GitHub Actions runs again; branch protection on `main` active (required checks `verify`, `security`, no approvals, no force push).
 
-Carry-overs for P1-12 (staging): from P1-06 review — L1 trusted proxy/client IP for rate limiting, L2 fail-fast on missing auth base URL / trusted origins outside local dev, L3 Secure cookies derived from base URL scheme; from P1-09 review — app DB role must not own `finance` tables (migrations as owner role, app as limited role).
+Carry-overs for P1-12 (staging): from P1-06 review — L1 trusted proxy/client IP for rate limiting, L2 fail-fast on missing auth base URL / trusted origins outside local dev, L3 Secure cookies derived from base URL scheme; from P1-09 review — app DB role must not own `finance` tables (migrations as owner role, app as limited role); from P1-11 review — I1 remove duplicate currency-exponent table, I2 explicit i18nKey instead of message matching. All included in TASK-P1-12.
