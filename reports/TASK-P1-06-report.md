@@ -2,7 +2,7 @@
 
 ## Implemented
 
-### 1. Prerequisite Tooling Upgrades (Approved by Claude, Commit 1: `fbeac15`)
+### 1. Prerequisite Tooling Upgrades (Approved by Claude, Commit 1: `04680a9`)
 - Upgraded `vitest` from `^3.0.5` to `^4.1.12` across all 6 workspace `package.json` files (`package.json`, `apps/api`, `apps/web`, `packages/db`, `packages/money`, `packages/time`) so `better-auth@1.7.28`'s optional `vitest` peerDependency no longer pulls `tinypool@1.1.1` (which had 2 critical advisories) into `pnpm audit --prod --audit-level high`.
 - Upgraded `drizzle-kit` from `^0.30.5` to `^0.31.11` in `packages/db/package.json` (satisfying `better-auth@1.7.28`'s `>=0.31.4` peer range). Verified `pnpm db:generate` produced **no new migration** before adding the `identity` schema (`No schema changes, nothing to migrate 😴`).
 - Added `tools/tsconfig.json` and simplified `eslint.config.mjs` (`projectService: true`) so `eslint tools` retains ES2022 `Set` lib types under Vitest 4.
@@ -123,7 +123,36 @@ Received: "completed"
 
 ## Fresh-Clone Verification
 
-Will be populated with real outputs from `/tmp/p1check-p106` immediately after pushing branch `task/P1-06-identity`.
+Verified in a fresh clone of `task/P1-06-identity` at `/tmp/p1check-p106` (commit `0d494a7306bf41714e1adbe305b24d773602763f`):
+
+```bash
+rm -rf /tmp/p1check-p106
+git clone -b task/P1-06-identity https://github.com/thutniteso-eng/InternationalOTA.git /tmp/p1check-p106
+cd /tmp/p1check-p106
+pnpm install --frozen-lockfile
+pnpm format:check
+pnpm lint
+pnpm lint:boundaries
+pnpm typecheck
+pnpm build
+DATABASE_URL="postgresql://ota_user:ota_password@localhost:55432/ota_dev" pnpm db:migrate
+DATABASE_URL="postgresql://ota_user:ota_password@localhost:55432/ota_dev" pnpm db:seed
+DATABASE_URL="postgresql://ota_user:ota_password@localhost:55432/ota_dev" pnpm test
+pnpm licenses:check
+pnpm audit --prod --audit-level high
+```
+
+Real results (all commands exited `0`):
+- `pnpm format:check`: `All matched files use Prettier code style!` across all 6 workspace projects + `tools/`.
+- `pnpm lint`: all 6 workspace projects + `eslint tools` passed with 0 errors.
+- `pnpm lint:boundaries`: `✔ no dependency violations found (43 modules, 131 dependencies cruised)`.
+- `pnpm typecheck` & `pnpm build`: all 6 workspace projects built and typechecked cleanly.
+- `pnpm db:migrate` & `pnpm db:seed`: applied `0003_mixed_steel_serpent.sql` and seeded reference data idempotently.
+- `pnpm test` (Vitest `4.1.12`):
+  - `apps/api`: `Test Files  4 passed (4)` / `Tests  31 passed (31)` (`hash.spec.ts` 11, `health.controller.spec.ts` 3, `idempotency.spec.ts` 9 including H1, `identity.spec.ts` 8 covering AC1–AC6, AC8, AC9).
+  - `packages/db`: 22 passed; `packages/money`: 41 passed; `packages/time`: 19 passed; `packages/shared`: passed; `apps/web`: 1 passed; `tools`: 16 passed.
+- `pnpm licenses:check`: `✅ All 369 package licenses verified successfully.`
+- `pnpm audit --prod --audit-level high`: exited `0` (0 high, 0 critical; 1 moderate).
 
 ---
 
@@ -134,7 +163,7 @@ Will be populated with real outputs from `/tmp/p1check-p106` immediately after p
 
 ## Deviations from spec (and why)
 
-- Approved by Claude before implementation: upgraded `vitest` workspace-wide to `^4.1.12` and `drizzle-kit` to `^0.31.11` (Commit 1: `fbeac15`) to resolve the `pnpm audit --prod --audit-level high` critical findings on `tinypool@1.1.1` pulled via `better-auth`'s optional `vitest` peerDependency and satisfy `better-auth`'s `drizzle-kit >= 0.31.4` peer range.
+- Approved by Claude before implementation: upgraded `vitest` workspace-wide to `^4.1.12` and `drizzle-kit` to `^0.31.11` (Commit 1: `04680a9`) to resolve the `pnpm audit --prod --audit-level high` critical findings on `tinypool@1.1.1` pulled via `better-auth`'s optional `vitest` peerDependency and satisfy `better-auth`'s `drizzle-kit >= 0.31.4` peer range.
 
 ## Remaining risks
 
