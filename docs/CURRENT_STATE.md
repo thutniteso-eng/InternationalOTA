@@ -22,12 +22,12 @@ Staging: Owner's WSL + Docker + Cloudflare quick tunnel (D-017), `scripts/stagin
 
 ## Decisions
 Approved/decided: D-001…D-003, D-005…D-017 (see DECISIONS.md). **Open: D-004 merchant model (legal/accounting).**
-D-018: verified email required before payment.
+D-018: verified email required before payment. D-020: external integrations via adapters; Mock gateway + Mailpit locally.
 
 ## Open items outside code
-- Payment gateway choice + sandbox account (Owner) — blocks P2-06 only.
+- Real payment gateway (Owner) — deferred by D-020; P2-06 builds the Mock gateway, no longer blocked.
 - Legal/accounting advice for D-004 (Owner) — blocks live sales, not development.
-- Real tour/activity data for pilot (Owner) — needed by P2-01..P2-03 acceptance.
+- Real tour data (Owner) — demo set used meanwhile (implementation/demo-data, PR #25).
 
 ## Phase 2 tasks
 | Task | Status |
