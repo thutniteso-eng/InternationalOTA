@@ -15,7 +15,7 @@ export default tseslint.config(
     ...tseslint.configs.disableTypeChecked,
   },
   {
-    files: ['packages/money/src/**/*.ts'],
+    files: ['packages/money/src/**/*.ts', 'apps/api/src/modules/finance/**/*.ts'],
     rules: {
       'no-restricted-globals': [
         'error',
