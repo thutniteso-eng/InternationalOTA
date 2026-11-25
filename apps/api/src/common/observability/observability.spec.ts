@@ -17,7 +17,7 @@ import { AppModule } from '../../app.module.js';
 import { configureApp } from '../../app.setup.js';
 import { DRIZZLE_DB } from '../../database/database.module.js';
 import { MessagingModule, OutboxService } from '../../modules/messaging/index.js';
-import { createPinoLogger } from './logger.js';
+import { createPinoLogger, PinoNestLogger } from './logger.js';
 import { REQUEST_ID_REGEX } from './request-context.js';
 
 const TEST_AUTH_SECRET = 'p1-10-observability-test-auth-secret-32-chars';
@@ -446,5 +446,71 @@ describe('Observability: structured logs, request IDs, redaction, and async corr
         process.env['LOG_PRETTY'] = prevPretty;
       }
     }
+  });
+
+  it('O4: nest.error(err), pino.error({ err }, msg), and pino-http 5xx preserve message, stack, and SQLSTATE without [object Object] or secret leaks', async () => {
+    const nestLogger = new PinoNestLogger(pinoLogger);
+
+    // Build a real failing DrizzleQueryError carrying a secret bound parameter
+    let capturedDbErr: unknown;
+    try {
+      await testDb.db.execute(
+        sql`SELECT 1 FROM identity.session WHERE token = ${'o4_secret_token_xyz'} AND id = ${'bad-uuid'}::uuid`,
+      );
+    } catch (err: unknown) {
+      capturedDbErr = err;
+    }
+    expect(capturedDbErr).toBeInstanceOf(Error);
+
+    // 1. nest.error(err) — regular Error + DB error
+    rawLogBuffer = '';
+    nestLogger.error(new Error('O4 nest direct error message'));
+    nestLogger.error(capturedDbErr);
+
+    expect(rawLogBuffer).not.toContain('[object Object]');
+    expect(rawLogBuffer).not.toContain('o4_secret_token_xyz');
+    expect(rawLogBuffer).toContain('O4 nest direct error message');
+    expect(rawLogBuffer).toContain('at ');
+    expect(rawLogBuffer).toContain('42883');
+
+    // 2. pino.error({ err }, msg) — regular Error + DB error + nested secret sibling
+    rawLogBuffer = '';
+    pinoLogger.error(
+      {
+        err: new Error('O4 pino structured error message'),
+        nested: { password: 'o4_nested_secret_password' },
+      },
+      'pino error call form',
+    );
+    pinoLogger.error({ err: capturedDbErr }, 'pino db error call form');
+
+    expect(rawLogBuffer).not.toContain('[object Object]');
+    expect(rawLogBuffer).not.toContain('o4_nested_secret_password');
+    expect(rawLogBuffer).not.toContain('o4_secret_token_xyz');
+    expect(rawLogBuffer).toContain('O4 pino structured error message');
+    expect(rawLogBuffer).toContain('at ');
+    expect(rawLogBuffer).toContain('42883');
+    expect(rawLogBuffer).toContain('[REDACTED]');
+
+    // 3. pino-http + ProblemDetailsFilter logging a 5xx response (both normal 5xx and DB 5xx)
+    rawLogBuffer = '';
+    const boomRes = await fetch(`${baseUrl}/__test/obs/boom`, {
+      headers: { 'X-Request-Id': 'req-o4-http-5xx-01' },
+    });
+    expect(boomRes.status).toBe(500);
+    await boomRes.json();
+
+    const dbBoomRes = await fetch(`${baseUrl}/__test/obs/db-boom`, {
+      headers: { 'X-Request-Id': 'req-o4-http-db5xx-02' },
+    });
+    expect(dbBoomRes.status).toBe(500);
+    await dbBoomRes.json();
+
+    expect(rawLogBuffer).not.toContain('[object Object]');
+    expect(rawLogBuffer).not.toContain('sess_secret_token_o1_never_log');
+    expect(rawLogBuffer).not.toContain('o1-secret-user@example.com');
+    expect(rawLogBuffer).toContain('Secret internal DB stack detail');
+    expect(rawLogBuffer).toContain('at ');
+    expect(rawLogBuffer).toContain('42883');
   });
 });

@@ -78,8 +78,22 @@ function stripStackHeader(stack: string | undefined): string | undefined {
   return frames.length > 0 ? frames : undefined;
 }
 
+function isAlreadySerializedError(err: unknown): err is SafeSerializedError {
+  if (typeof err !== 'object' || err === null || err instanceof Error || Array.isArray(err)) {
+    return false;
+  }
+  const rec = err as Record<string, unknown>;
+  return typeof rec['type'] === 'string' && typeof rec['message'] === 'string';
+}
+
 /**
- * Serializes errors safely for structured logging (O1).
+ * Serializes errors safely for structured logging (O1, O4).
+ *
+ * Order of operations (O4): serialize Error instances FIRST (preserving `type`,
+ * `message`, `stack`, and safe `cause` fields, while stripping bound params for
+ * query errors), THEN redact the resulting plain object via `redactDeep`.
+ * Idempotent on already-serialized error objects so running in both `formatters.log`
+ * and Pino's `serializers.err` never collapses an error to `[object Object]`.
  *
  * For `DrizzleQueryError` (and any error carrying a `params` array or `query` string),
  * strips bound parameters from both `message` and `stack`, logs the SQL text without
@@ -87,6 +101,10 @@ function stripStackHeader(stack: string | undefined): string | undefined {
  * `table`, `column`, `routine`) — explicitly excluding `detail` which can contain PII.
  */
 export function serializeSafeError(err: unknown): SafeSerializedError {
+  if (isAlreadySerializedError(err)) {
+    return redactDeep(err) as SafeSerializedError;
+  }
+
   if (isDatabaseQueryError(err)) {
     const queryText =
       typeof err.query === 'string'
@@ -97,13 +115,14 @@ export function serializeSafeError(err: unknown): SafeSerializedError {
             ?.trim();
     const safeCause = extractSafePgCause(err.cause);
     const safeFrames = stripStackHeader(err.stack);
-    return {
+    const serialized: SafeSerializedError = {
       type: err.name || 'DatabaseQueryError',
       message: 'Database query failed',
       ...(queryText ? { query: queryText } : {}),
       ...(safeCause ? { cause: safeCause } : {}),
       ...(safeFrames ? { stack: safeFrames } : {}),
     };
+    return redactDeep(serialized) as SafeSerializedError;
   }
 
   if (err instanceof Error) {
@@ -114,12 +133,13 @@ export function serializeSafeError(err: unknown): SafeSerializedError {
       : withCause.cause instanceof Error
         ? serializeSafeError(withCause.cause)
         : undefined;
-    return {
+    const serialized: SafeSerializedError = {
       type: err.name || 'Error',
       message: err.message,
       ...(err.stack ? { stack: err.stack } : {}),
       ...(safeCause ? { cause: safeCause } : {}),
     };
+    return redactDeep(serialized) as SafeSerializedError;
   }
 
   return {
