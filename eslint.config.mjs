@@ -62,6 +62,17 @@ export default tseslint.config(
     },
   },
   {
+    files: ['apps/api/src/**/*.ts', 'packages/*/src/**/*.ts'],
+    ignores: [
+      'packages/db/src/seed.ts',
+      'packages/db/src/migrate.ts',
+      'packages/db/src/grant-role.ts',
+    ],
+    rules: {
+      'no-console': 'error',
+    },
+  },
+  {
     ignores: [
       '**/dist/**',
       '**/.next/**',

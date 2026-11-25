@@ -11,6 +11,7 @@ import {
   sql,
 } from '@internationalota/db';
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { getRequestId, runWithRequestContext } from '../../common/observability/request-context.js';
 import { DRIZZLE_DB } from '../../database/database.module.js';
 import {
   calculateExponentialBackoffMs,
@@ -47,13 +48,28 @@ export class OutboxService {
    * There is intentionally no overload without a transaction handle.
    */
   async enqueue(tx: DatabaseTransaction, event: EnqueueOutboxEventInput): Promise<OutboxEvent> {
+    const requestId = getRequestId();
+    const existingMeta =
+      typeof event.payload['_meta'] === 'object' && event.payload['_meta'] !== null
+        ? (event.payload['_meta'] as Record<string, unknown>)
+        : {};
+    const payload = requestId
+      ? {
+          ...event.payload,
+          _meta: {
+            ...existingMeta,
+            requestId,
+          },
+        }
+      : event.payload;
+
     const [inserted] = await tx
       .insert(outboxEvents)
       .values({
         aggregateType: event.aggregateType,
         aggregateId: event.aggregateId,
         eventType: event.eventType,
-        payload: event.payload,
+        payload,
       })
       .returning();
 
@@ -134,14 +150,34 @@ export class OutboxService {
 
       for (const event of claimed) {
         const handler = this.handlers.get(event.eventType);
+        const attempt = event.attempts + 1;
+        const payloadObj =
+          typeof event.payload === 'object' && event.payload !== null
+            ? (event.payload as Record<string, unknown>)
+            : null;
+        const metaObj =
+          payloadObj && typeof payloadObj['_meta'] === 'object' && payloadObj['_meta'] !== null
+            ? (payloadObj['_meta'] as Record<string, unknown>)
+            : null;
+        const eventRequestId =
+          typeof metaObj?.['requestId'] === 'string' ? metaObj['requestId'] : undefined;
+
         let handlerError: unknown = null;
         let handlerSucceeded = false;
 
-        try {
+        const executeHandler = async (): Promise<void> => {
           if (!handler) {
             throw new Error(`No handler registered for outbox event type "${event.eventType}"`);
           }
           await handler(event);
+        };
+
+        try {
+          if (eventRequestId) {
+            await runWithRequestContext(eventRequestId, executeHandler);
+          } else {
+            await executeHandler();
+          }
           handlerSucceeded = true;
         } catch (err: unknown) {
           handlerError = err;
@@ -160,8 +196,18 @@ export class OutboxService {
               lastError: null,
             })
             .where(eq(outboxEvents.id, event.id));
+
+          this.logger.log(
+            JSON.stringify({
+              event: 'outbox_event_published',
+              eventId: event.id,
+              eventType: event.eventType,
+              attempt,
+              ...(eventRequestId ? { requestId: eventRequestId } : {}),
+            }),
+          );
         } else {
-          const nextAttempts = event.attempts + 1;
+          const nextAttempts = attempt;
           const errorMessage =
             handlerError instanceof Error ? handlerError.message : String(handlerError);
 
@@ -179,12 +225,15 @@ export class OutboxService {
               JSON.stringify({
                 level: 'error',
                 event: 'outbox_event_dead_lettered',
+                eventId: event.id,
                 outboxEventId: event.id,
                 aggregateType: event.aggregateType,
                 aggregateId: event.aggregateId,
                 eventType: event.eventType,
+                attempt: nextAttempts,
                 attempts: nextAttempts,
                 lastError: errorMessage,
+                ...(eventRequestId ? { requestId: eventRequestId } : {}),
               }),
             );
           } else {
@@ -197,6 +246,17 @@ export class OutboxService {
                 nextAttemptAt: sql`now() + (${backoffMs} * interval '1 millisecond')`,
               })
               .where(eq(outboxEvents.id, event.id));
+
+            this.logger.warn(
+              JSON.stringify({
+                event: 'outbox_event_retry_scheduled',
+                eventId: event.id,
+                eventType: event.eventType,
+                attempt: nextAttempts,
+                lastError: errorMessage,
+                ...(eventRequestId ? { requestId: eventRequestId } : {}),
+              }),
+            );
           }
         }
       }

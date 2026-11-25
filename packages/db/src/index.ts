@@ -14,6 +14,7 @@ export {
   or,
   sql,
 } from 'drizzle-orm';
+export { uuidv7 } from 'uuidv7';
 export * from './client.ts';
 export * from './columns.ts';
 export * from './grant-role.ts';
