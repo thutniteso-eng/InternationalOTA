@@ -5,6 +5,9 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    // Isolated test DBs install PostGIS + unaccent + pg_trgm migrations under parallel worker load.
+    hookTimeout: 45_000,
+    testTimeout: 45_000,
   },
   plugins: [swc.vite()],
 });
