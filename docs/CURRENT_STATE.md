@@ -16,7 +16,8 @@ Task status:
 | P1-05 Reference data | DONE — merged (PR #7) |
 | P1-06 Identity | DONE — merged (PR #12); L1–L3 → P1-12, L4 Phase 2 decision |
 | P1-07 Idempotency-Key | DONE — merged (PR #9); H1 closed in P1-06 |
-| P1-08 Outbox / jobs / webhook inbox | READY — spec in implementation/tasks (ready now) |
+| P1-08 Outbox / jobs / webhook inbox | DONE — merged (PR #14) after W1–W5 corrections |
+| P1-09 Double-entry ledger | READY — spec in implementation/tasks |
 
 No application code exists yet.
 
