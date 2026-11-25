@@ -5,9 +5,12 @@ import { and, eq, sql } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createTestDatabase, type TestDbInstance } from '../../../test/test-db.js';
 import { AppModule } from '../../app.module.js';
+import { configureApp } from '../../app.setup.js';
 import { DRIZZLE_DB } from '../../database/database.module.js';
 import { computeRequestHash } from './hash.js';
 import { testGate } from './test-idempotent-counter.controller.js';
+
+const TEST_AUTH_SECRET = 'test-better-auth-secret-key-at-least-32-chars';
 
 function closeTestGate(): () => void {
   let release!: () => void;
@@ -19,11 +22,24 @@ function closeTestGate(): () => void {
   return release;
 }
 
+function enqueueTestGate(): () => void {
+  let release!: () => void;
+  const open = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  testGate.queue.push({ open, release });
+  return release;
+}
+
 function resetTestGate(): void {
   testGate.holdFirst = false;
   testGate.release();
   testGate.open = Promise.resolve();
   testGate.release = (): void => {};
+  while (testGate.queue.length > 0) {
+    const entry = testGate.queue.shift();
+    entry?.release();
+  }
 }
 
 async function waitForInProgressRow(
@@ -48,10 +64,13 @@ describe('Idempotency module integration tests', () => {
   let db: DatabaseClient;
   let testDb: TestDbInstance;
   let previousDatabaseUrl: string | undefined;
+  let previousAuthSecret: string | undefined;
 
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
     previousDatabaseUrl = process.env.DATABASE_URL;
+    previousAuthSecret = process.env.BETTER_AUTH_SECRET;
+    process.env.BETTER_AUTH_SECRET = TEST_AUTH_SECRET;
     testDb = await createTestDatabase();
     process.env.DATABASE_URL = testDb.testUrl;
 
@@ -59,7 +78,8 @@ describe('Idempotency module integration tests', () => {
       imports: [AppModule],
     }).compile();
 
-    app = moduleFixture.createNestApplication();
+    app = moduleFixture.createNestApplication({ bodyParser: false });
+    configureApp(app);
     await app.listen(0);
     baseUrl = await app.getUrl();
     db = moduleFixture.get<DatabaseClient>(DRIZZLE_DB);
@@ -74,6 +94,11 @@ describe('Idempotency module integration tests', () => {
       delete process.env.DATABASE_URL;
     } else {
       process.env.DATABASE_URL = previousDatabaseUrl;
+    }
+    if (previousAuthSecret === undefined) {
+      delete process.env.BETTER_AUTH_SECRET;
+    } else {
+      process.env.BETTER_AUTH_SECRET = previousAuthSecret;
     }
     if (testDb) {
       await testDb.teardown();
@@ -516,5 +541,92 @@ describe('Idempotency module integration tests', () => {
     expect(replayRes.status).toBe(201);
     expect(replayRes.headers.get('Idempotent-Replayed')).toBe('true');
     expect(await replayRes.json()).toEqual({ count: 1 });
+  });
+
+  it('H1: Same-payload fencing prevents stale execution #1 from overwriting in-progress takeover execution #2', async () => {
+    const key = 'test-same-payload-fencing-h1';
+    const scope = 'POST /__test/idempotent-counter';
+    const payload = { value: 42 };
+
+    // Enqueue two sequential gates: one for execution #1, one for execution #2
+    const releaseFirst = enqueueTestGate();
+    const releaseSecond = enqueueTestGate();
+
+    try {
+      // 1. Fire execution #1 (holds gate #1)
+      const firstPromise = fetch(`${baseUrl}/__test/idempotent-counter`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': key,
+        },
+        body: JSON.stringify(payload),
+      });
+      await waitForInProgressRow(db, key);
+
+      // 2. Expire execution #1's lock so execution #2 can take over
+      await db
+        .update(idempotencyKeys)
+        .set({ lockedUntil: sql`now() - interval '10 seconds'` })
+        .where(and(eq(idempotencyKeys.scope, scope), eq(idempotencyKeys.key, key)));
+
+      // 3. Fire execution #2 with the SAME key and SAME payload (takes over and holds gate #2)
+      const secondPromise = fetch(`${baseUrl}/__test/idempotent-counter`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': key,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      // Wait until execution #2 has taken over (locked_until refreshed into the future)
+      const deadline = Date.now() + 5000;
+      while (Date.now() < deadline) {
+        const [row] = await db
+          .select({
+            state: idempotencyKeys.state,
+            isFresh: sql<boolean>`${idempotencyKeys.lockedUntil} > now()`,
+          })
+          .from(idempotencyKeys)
+          .where(and(eq(idempotencyKeys.scope, scope), eq(idempotencyKeys.key, key)));
+        if (row && row.state === 'in_progress' && row.isFresh) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+
+      // 4. Release execution #1 while execution #2 is still in_progress
+      releaseFirst();
+      const firstRes = await firstPromise;
+      expect(firstRes.status).toBe(201);
+      expect(firstRes.headers.get('Idempotent-Replayed')).toBeNull();
+      expect(await firstRes.json()).toEqual({ count: 1 });
+
+      // Assert the DB row is STILL in_progress (NOT overwritten with #1's response)
+      const [rowAfterFirst] = await db
+        .select()
+        .from(idempotencyKeys)
+        .where(and(eq(idempotencyKeys.scope, scope), eq(idempotencyKeys.key, key)));
+      expect(rowAfterFirst?.state).toBe('in_progress');
+      expect(rowAfterFirst?.responseBody).toBeNull();
+
+      // 5. Release execution #2 -> completes and stores #2's response ({ count: 2 })
+      releaseSecond();
+      const secondRes = await secondPromise;
+      expect(secondRes.status).toBe(201);
+      expect(secondRes.headers.get('Idempotent-Replayed')).toBeNull();
+      expect(await secondRes.json()).toEqual({ count: 2 });
+
+      const [rowAfterSecond] = await db
+        .select()
+        .from(idempotencyKeys)
+        .where(and(eq(idempotencyKeys.scope, scope), eq(idempotencyKeys.key, key)));
+      expect(rowAfterSecond?.state).toBe('completed');
+      expect(rowAfterSecond?.responseBody).toEqual({ count: 2 });
+    } finally {
+      releaseFirst();
+      releaseSecond();
+    }
   });
 });

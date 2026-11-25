@@ -72,6 +72,17 @@ describe('Idempotency hash & validation utilities', () => {
 
       expect(computeScope(mockReq)).toBe('POST /api/bookings');
     });
+
+    it('prefixes scope with userId: when a principal is attached', () => {
+      const mockReq = {
+        method: 'post',
+        baseUrl: '/api',
+        route: { path: '/bookings' },
+        principal: { userId: 'usr_123', kind: 'customer', roles: ['customer'] },
+      } as unknown as Request;
+
+      expect(computeScope(mockReq)).toBe('usr_123:POST /api/bookings');
+    });
   });
 
   describe('computeRequestHash', () => {
