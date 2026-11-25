@@ -19,3 +19,4 @@
 - P1-06 merged (PR #12). D-016: Owner delegated merging of Claude-ACCEPTED, CI-green PRs to Claude.
 - P1-08 merged (PR #14) after W1 (unsigned header dedupe bypass) and W2 (unbounded body) were proven and fixed. Added TASK-P1-09 spec.
 - P1-09 merged (PR #16) after K1 (append to old entry), K2 (TRUNCATE), K3 (account currency change) were proven and fixed. Added TASK-P1-10 spec.
+- P1-10 merged (PR #18): DB-error parameter leak (O1) and shallow redaction (O2) fixed; regression O4 (errors logged as [object Object]) caught and fixed. Claude's O3 finding was a misread. Added TASK-P1-11 spec.
