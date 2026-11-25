@@ -15,6 +15,7 @@
     "db:studio": "pnpm --filter @internationalota/db exec drizzle-kit studio",
     "format": "prettier --write .",
     "format:check": "pnpm -r run format:check && prettier --check tools",
+    "identity:grant-role": "pnpm --filter @internationalota/db run identity:grant-role",
     "licenses:check": "node tools/check-licenses.mjs",
     "lint": "pnpm build:packages && pnpm -r run lint && eslint tools",
     "lint:boundaries": "depcruise apps/api/src --config .dependency-cruiser.cjs",
@@ -27,7 +28,7 @@
     "prettier": "^3.5.0",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.24.0",
-    "vitest": "^3.0.5"
+    "vitest": "^4.1.12"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

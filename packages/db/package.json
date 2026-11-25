@@ -26,6 +26,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "pnpm build && node dist/migrate.js",
     "db:seed": "pnpm build && node dist/seed.js",
+    "identity:grant-role": "pnpm build && node dist/grant-role.js",
     "generate:reference-data": "node --experimental-strip-types scripts/generate-reference-data.ts"
   },
   "dependencies": {
@@ -38,9 +39,9 @@
     "@internationalota/time": "workspace:*",
     "@types/pg": "^8.11.11",
     "currency-codes": "^2.2.0",
-    "drizzle-kit": "^0.30.5",
+    "drizzle-kit": "^0.31.11",
     "i18n-iso-countries": "^7.14.0",
     "typescript": "^5.7.3",
-    "vitest": "^3.0.5"
+    "vitest": "^4.1.12"
   }
 }

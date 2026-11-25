@@ -6,14 +6,20 @@ import { Idempotent } from './idempotent.decorator.js';
 
 const COUNTER_KEY = 'test_idempotent_counter';
 
+export interface TestGateEntry {
+  open: Promise<void>;
+  release: () => void;
+}
+
 /**
  * Test-only gate controlled by integration tests to deterministically hold
- * an in-flight request inside the handler while concurrent requests arrive.
+ * in-flight requests inside the handler while concurrent or takeover requests arrive.
  */
 export const testGate = {
   holdFirst: false,
   open: Promise.resolve(),
   release: (): void => {},
+  queue: [] as TestGateEntry[],
 };
 
 export interface IncrementCounterBody {
@@ -35,9 +41,16 @@ export class TestIdempotentCounterController {
   @Post()
   @Idempotent()
   async incrementCounter(@Body() body?: IncrementCounterBody) {
-    if (body?.useGate !== false && testGate.holdFirst) {
-      testGate.holdFirst = false;
-      await testGate.open;
+    if (body?.useGate !== false) {
+      if (testGate.queue.length > 0) {
+        const nextGate = testGate.queue.shift();
+        if (nextGate) {
+          await nextGate.open;
+        }
+      } else if (testGate.holdFirst) {
+        testGate.holdFirst = false;
+        await testGate.open;
+      }
     }
 
     if (body?.throwSecretError) {
