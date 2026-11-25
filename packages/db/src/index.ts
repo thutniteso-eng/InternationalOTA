@@ -1,3 +1,4 @@
+export { and, asc, desc, eq, gt, gte, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 export * from './client.ts';
 export * from './columns.ts';
 export * from './grant-role.ts';

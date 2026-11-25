@@ -1,6 +1,5 @@
-import { appMeta, type DatabaseClient } from '@internationalota/db';
+import { appMeta, type DatabaseClient, eq, sql } from '@internationalota/db';
 import { Body, Controller, Get, Inject, InternalServerErrorException, Post } from '@nestjs/common';
-import { eq, sql } from 'drizzle-orm';
 import { DRIZZLE_DB } from '../../database/database.module.js';
 import { Idempotent } from './idempotent.decorator.js';
 

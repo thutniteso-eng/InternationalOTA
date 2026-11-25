@@ -1,7 +1,6 @@
-import { appMeta, type DatabaseClient, idempotencyKeys } from '@internationalota/db';
+import { and, appMeta, type DatabaseClient, eq, idempotencyKeys, sql } from '@internationalota/db';
 import type { INestApplication } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
-import { and, eq, sql } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createTestDatabase, type TestDbInstance } from '../../../test/test-db.js';
 import { AppModule } from '../../app.module.js';

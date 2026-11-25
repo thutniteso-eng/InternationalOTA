@@ -1,5 +1,6 @@
 import {
   type DatabaseClient,
+  eq,
   grantRoleByEmail,
   idempotencyKeys,
   identityAccounts,
@@ -7,10 +8,10 @@ import {
   identitySessions,
   identityUserRoles,
   identityUsers,
+  sql,
 } from '@internationalota/db';
 import { type INestApplication, Logger } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
-import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestDatabase, type TestDbInstance } from '../../../test/test-db.js';
 import { AppModule } from '../../app.module.js';

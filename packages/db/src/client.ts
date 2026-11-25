@@ -7,6 +7,7 @@ export { Pool };
 
 export type DatabaseSchema = typeof schema;
 export type DatabaseClient = NodePgDatabase<DatabaseSchema>;
+export type DatabaseTransaction = Parameters<Parameters<DatabaseClient['transaction']>[0]>[0];
 
 export interface CreateDbClientOptions {
   connectionString?: string;

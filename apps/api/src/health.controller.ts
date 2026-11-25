@@ -1,6 +1,5 @@
 import { Controller, Get, HttpException, HttpStatus, Inject } from '@nestjs/common';
-import type { DatabaseClient } from '@internationalota/db';
-import { sql } from 'drizzle-orm';
+import { type DatabaseClient, sql } from '@internationalota/db';
 import { DRIZZLE_DB } from './database/database.module.js';
 
 export interface HealthStatusResponse {

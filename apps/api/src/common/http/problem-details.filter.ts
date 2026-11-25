@@ -16,6 +16,7 @@ const STATUS_TITLES: Record<number, string> = {
   [HttpStatus.FORBIDDEN]: 'Forbidden',
   [HttpStatus.NOT_FOUND]: 'Not Found',
   [HttpStatus.CONFLICT]: 'Conflict',
+  [HttpStatus.PAYLOAD_TOO_LARGE]: 'Payload Too Large',
   [HttpStatus.UNPROCESSABLE_ENTITY]: 'Unprocessable Entity',
   [HttpStatus.TOO_MANY_REQUESTS]: 'Too Many Requests',
   [HttpStatus.INTERNAL_SERVER_ERROR]: 'Internal Server Error',
