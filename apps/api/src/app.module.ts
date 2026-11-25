@@ -5,9 +5,10 @@ import { DatabaseModule } from './database/database.module.js';
 import { HealthController } from './health.controller.js';
 import { IdempotencyModule } from './modules/idempotency/index.js';
 import { IdentityModule } from './modules/identity/index.js';
+import { MessagingModule } from './modules/messaging/index.js';
 
 @Module({
-  imports: [DatabaseModule, IdentityModule, IdempotencyModule],
+  imports: [DatabaseModule, IdentityModule, IdempotencyModule, MessagingModule],
   controllers: [HealthController],
   providers: [
     ProblemDetailsFilter,

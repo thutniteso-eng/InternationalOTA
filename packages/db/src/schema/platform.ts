@@ -2,6 +2,8 @@ import { sql } from 'drizzle-orm';
 import {
   char,
   check,
+  index,
+  integer,
   jsonb,
   pgSchema,
   primaryKey,
@@ -9,7 +11,7 @@ import {
   text,
   timestamp,
 } from 'drizzle-orm/pg-core';
-import { timestamps } from '../columns.ts';
+import { id, timestamps } from '../columns.ts';
 
 export const platformSchema = pgSchema('platform');
 
@@ -38,7 +40,54 @@ export const idempotencyKeys = platformSchema.table(
   ],
 );
 
+export const outboxEvents = platformSchema.table(
+  'outbox_events',
+  {
+    id: id('id'),
+    aggregateType: text('aggregate_type').notNull(),
+    aggregateId: text('aggregate_id').notNull(),
+    eventType: text('event_type').notNull(),
+    payload: jsonb('payload').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+    lastError: text('last_error'),
+    deadLetteredAt: timestamp('dead_lettered_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('outbox_events_pending_idx')
+      .on(table.nextAttemptAt, table.occurredAt)
+      .where(sql`published_at IS NULL AND dead_lettered_at IS NULL`),
+  ],
+);
+
+export const inboxMessages = platformSchema.table(
+  'inbox_messages',
+  {
+    provider: text('provider').notNull(),
+    providerEventId: text('provider_event_id').notNull(),
+    payload: jsonb('payload').notNull(),
+    receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+    processedAt: timestamp('processed_at', { withTimezone: true }),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+    lastError: text('last_error'),
+    deadLetteredAt: timestamp('dead_lettered_at', { withTimezone: true }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.provider, table.providerEventId] }),
+    index('inbox_messages_pending_idx')
+      .on(table.nextAttemptAt, table.receivedAt)
+      .where(sql`processed_at IS NULL AND dead_lettered_at IS NULL`),
+  ],
+);
+
 export type AppMeta = typeof appMeta.$inferSelect;
 export type NewAppMeta = typeof appMeta.$inferInsert;
 export type IdempotencyKey = typeof idempotencyKeys.$inferSelect;
 export type NewIdempotencyKey = typeof idempotencyKeys.$inferInsert;
+export type OutboxEvent = typeof outboxEvents.$inferSelect;
+export type NewOutboxEvent = typeof outboxEvents.$inferInsert;
+export type InboxMessage = typeof inboxMessages.$inferSelect;
+export type NewInboxMessage = typeof inboxMessages.$inferInsert;

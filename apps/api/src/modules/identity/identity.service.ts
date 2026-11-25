@@ -1,6 +1,7 @@
 import type { IncomingHttpHeaders } from 'node:http';
 import {
   type DatabaseClient,
+  eq,
   identityAccounts,
   identityRateLimits,
   identitySessions,
@@ -13,7 +14,6 @@ import { Inject, Injectable, Optional } from '@nestjs/common';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { fromNodeHeaders, toNodeHandler } from 'better-auth/node';
-import { eq } from 'drizzle-orm';
 import type { RequestHandler } from 'express';
 import { DRIZZLE_DB } from '../../database/database.module.js';
 import { EMAIL_SENDER, type EmailSender, LogOnlyEmailSender } from './email-sender.interface.js';
