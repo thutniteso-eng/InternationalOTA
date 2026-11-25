@@ -20,3 +20,7 @@ P2-01 catalog · P2-02 dated inventory (DB-enforced non-negative) · P2-03 prici
 
 ## Mandatory failure scenarios before live sales
 1) 50 concurrent requests for last seat → exactly 1 booking · 2) double pay click → one charge · 3) duplicate/early webhook → correct final state · 4) paid but supplier rejects → auto refund · 5) crash mid-saga → resumes, no loss · 6) hold expires as payment arrives → consistent outcome · 7) price change before pay → reconfirm · 8) cancel during confirm → no contradictory state.
+
+## Phase 2 notes carried from P1-08 review
+- Trigger an outbox relay job immediately after commit (today: 1-minute schedule → up to ~60 s latency).
+- Handlers doing slow external I/O need claim-then-release instead of holding row locks during the handler.
