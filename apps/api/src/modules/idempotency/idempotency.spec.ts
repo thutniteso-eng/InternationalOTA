@@ -128,6 +128,7 @@ describe('Idempotency module integration tests', () => {
       headers: {
         'Content-Type': 'application/json',
         'Idempotency-Key': key,
+        'Accept-Language': 'en',
       },
       body: JSON.stringify(payload),
     });
@@ -142,6 +143,7 @@ describe('Idempotency module integration tests', () => {
         headers: {
           'Content-Type': 'application/json',
           'Idempotency-Key': key,
+          'Accept-Language': 'en',
         },
         body: JSON.stringify(payload),
       }),
@@ -194,6 +196,7 @@ describe('Idempotency module integration tests', () => {
       headers: {
         'Content-Type': 'application/json',
         'Idempotency-Key': key,
+        'Accept-Language': 'en',
       },
       body: JSON.stringify(payload),
     });
@@ -219,6 +222,7 @@ describe('Idempotency module integration tests', () => {
       headers: {
         'Content-Type': 'application/json',
         'Idempotency-Key': key,
+        'Accept-Language': 'en',
       },
       body: JSON.stringify(payload),
     });
@@ -233,6 +237,7 @@ describe('Idempotency module integration tests', () => {
       headers: {
         'Content-Type': 'application/json',
         'Idempotency-Key': key,
+        'Accept-Language': 'en',
       },
       body: JSON.stringify(payload),
     });
@@ -259,6 +264,7 @@ describe('Idempotency module integration tests', () => {
       headers: {
         'Content-Type': 'application/json',
         'Idempotency-Key': key,
+        'Accept-Language': 'en',
       },
       body: JSON.stringify({ amount: 100 }),
     });
@@ -270,6 +276,7 @@ describe('Idempotency module integration tests', () => {
       headers: {
         'Content-Type': 'application/json',
         'Idempotency-Key': key,
+        'Accept-Language': 'en',
       },
       body: JSON.stringify({ amount: 200 }),
     });
@@ -292,7 +299,7 @@ describe('Idempotency module integration tests', () => {
     // Missing Idempotency-Key header
     const missingRes = await fetch(`${baseUrl}/__test/idempotent-counter`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Accept-Language': 'en' },
       body: JSON.stringify({ action: 'increment' }),
     });
     expect(missingRes.status).toBe(400);
@@ -341,6 +348,7 @@ describe('Idempotency module integration tests', () => {
       headers: {
         'Content-Type': 'application/json',
         'Idempotency-Key': key,
+        'Accept-Language': 'en',
       },
       body: JSON.stringify({ shouldFail: true }),
     });
@@ -364,6 +372,7 @@ describe('Idempotency module integration tests', () => {
       headers: {
         'Content-Type': 'application/json',
         'Idempotency-Key': key,
+        'Accept-Language': 'en',
       },
       body: JSON.stringify({ shouldFail: false }),
     });
@@ -443,6 +452,7 @@ describe('Idempotency module integration tests', () => {
       headers: {
         'Content-Type': 'application/json',
         'Idempotency-Key': key,
+        'Accept-Language': 'en',
       },
       body: JSON.stringify({ throwSecretError: true }),
     });
@@ -491,6 +501,7 @@ describe('Idempotency module integration tests', () => {
       headers: {
         'Content-Type': 'application/json',
         'Idempotency-Key': key,
+        'Accept-Language': 'en',
       },
       body: JSON.stringify(payload1),
     });
@@ -509,6 +520,7 @@ describe('Idempotency module integration tests', () => {
       headers: {
         'Content-Type': 'application/json',
         'Idempotency-Key': key,
+        'Accept-Language': 'en',
       },
       body: JSON.stringify(payload2),
     });
@@ -541,6 +553,7 @@ describe('Idempotency module integration tests', () => {
       headers: {
         'Content-Type': 'application/json',
         'Idempotency-Key': key,
+        'Accept-Language': 'en',
       },
       body: JSON.stringify(payload2),
     });
@@ -565,6 +578,7 @@ describe('Idempotency module integration tests', () => {
         headers: {
           'Content-Type': 'application/json',
           'Idempotency-Key': key,
+          'Accept-Language': 'en',
         },
         body: JSON.stringify(payload),
       });
@@ -582,6 +596,7 @@ describe('Idempotency module integration tests', () => {
         headers: {
           'Content-Type': 'application/json',
           'Idempotency-Key': key,
+          'Accept-Language': 'en',
         },
         body: JSON.stringify(payload),
       });

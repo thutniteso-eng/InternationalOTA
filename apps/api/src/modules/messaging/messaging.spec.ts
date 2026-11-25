@@ -622,6 +622,7 @@ describe('Messaging module integration tests (P1-08)', () => {
       headers: {
         'Content-Type': 'application/json',
         'X-Webhook-Signature': largeSig,
+        'Accept-Language': 'en',
       },
       body: largePayload,
     });

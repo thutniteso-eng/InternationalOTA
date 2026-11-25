@@ -201,7 +201,9 @@ describe('Identity & access module integration tests (P1-06)', () => {
 
   it('AC2: Missing, invalid, expired, and signed-out sessions return 401 problem+json', async () => {
     // 1. Missing session cookie -> 401 problem+json
-    const noCookieRes = await fetch(`${baseUrl}/__test/me`);
+    const noCookieRes = await fetch(`${baseUrl}/__test/me`, {
+      headers: { 'Accept-Language': 'en' },
+    });
     expect(noCookieRes.status).toBe(401);
     expect(noCookieRes.headers.get('Content-Type')).toContain('application/problem+json');
     const noCookieProblem = (await noCookieRes.json()) as { status: number; title: string };
@@ -264,7 +266,7 @@ describe('Identity & access module integration tests (P1-06)', () => {
 
     // Customer cannot access @Roles('admin')
     const deniedRes = await fetch(`${baseUrl}/__test/admin-only`, {
-      headers: { Cookie: cookie },
+      headers: { Cookie: cookie, 'Accept-Language': 'en' },
     });
     expect(deniedRes.status).toBe(403);
     expect(deniedRes.headers.get('Content-Type')).toContain('application/problem+json');

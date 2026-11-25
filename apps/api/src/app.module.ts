@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import { ProblemDetailsFilter } from './common/http/problem-details.filter.js';
+import { LocaleService } from './common/i18n/locale.service.js';
 import { DatabaseModule } from './database/database.module.js';
 import { HealthController } from './health.controller.js';
 import { FinanceModule } from './modules/finance/index.js';
@@ -12,11 +13,13 @@ import { MessagingModule } from './modules/messaging/index.js';
   imports: [DatabaseModule, IdentityModule, IdempotencyModule, MessagingModule, FinanceModule],
   controllers: [HealthController],
   providers: [
+    LocaleService,
     ProblemDetailsFilter,
     {
       provide: APP_FILTER,
       useClass: ProblemDetailsFilter,
     },
   ],
+  exports: [LocaleService],
 })
 export class AppModule {}

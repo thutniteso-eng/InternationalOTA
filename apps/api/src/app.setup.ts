@@ -1,7 +1,16 @@
+import {
+  BUILTIN_LOCALES,
+  getDefaultLocale,
+  matchLocaleTag,
+  negotiateLocale,
+  setI18nWarnLogger,
+  t,
+} from '@internationalota/i18n';
 import { HttpStatus, type INestApplication } from '@nestjs/common';
 import type { Express, NextFunction, Request, Response } from 'express';
 import type { Logger } from 'pino';
 import { pinoHttp } from 'pino-http';
+import { LocaleService } from './common/i18n/locale.service.js';
 import {
   createPinoLogger,
   PINO_SERIALIZERS,
@@ -22,19 +31,36 @@ function getWebhookMaxBodyBytes(): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_WEBHOOK_MAX_BODY_BYTES;
 }
 
-function sendPayloadTooLarge(res: Response, maxBytes: number, requestId?: string): void {
+function sendPayloadTooLarge(
+  res: Response,
+  maxBytes: number,
+  locale: string,
+  requestId?: string,
+): void {
   if (res.headersSent) {
     return;
   }
   res.status(HttpStatus.PAYLOAD_TOO_LARGE);
   res.setHeader('Content-Type', 'application/problem+json');
+  res.setHeader('Content-Language', locale);
   res.json({
     type: `https://httpstatuses.com/${HttpStatus.PAYLOAD_TOO_LARGE}`,
-    title: 'Payload Too Large',
+    title: t(locale, 'http.413.title'),
     status: HttpStatus.PAYLOAD_TOO_LARGE,
-    detail: `Webhook payload exceeds maximum allowed size of ${maxBytes} bytes`,
+    detail: t(locale, 'http.413.detail', { maxBytes }),
     ...(requestId ? { requestId } : {}),
   });
+}
+
+function resolveFallbackLocale(req: Request): string {
+  const rawQuery = Array.isArray(req.query?.['lang']) ? req.query['lang'][0] : req.query?.['lang'];
+  if (typeof rawQuery === 'string') {
+    const matched = matchLocaleTag(rawQuery, BUILTIN_LOCALES);
+    if (matched) {
+      return matched;
+    }
+  }
+  return negotiateLocale(req.headers['accept-language'], BUILTIN_LOCALES, getDefaultLocale());
 }
 
 /**
@@ -51,10 +77,19 @@ function sendPayloadTooLarge(res: Response, maxBytes: number, requestId?: string
 export function configureApp(app: INestApplication, options: ConfigureAppOptions = {}): void {
   const pinoLogger = options.logger ?? createPinoLogger();
   app.useLogger(new PinoNestLogger(pinoLogger));
+  setI18nWarnLogger((msg, meta) => {
+    pinoLogger.warn({ event: 'i18n_missing_key', ...meta }, msg);
+  });
 
   const httpAdapter = app.getHttpAdapter();
   const expressApp = httpAdapter.getInstance() as Express;
   const identityService = app.get(IdentityService);
+  let localeService: LocaleService | undefined;
+  try {
+    localeService = app.get(LocaleService, { strict: false });
+  } catch {
+    localeService = undefined;
+  }
 
   const httpLogger = pinoHttp({
     logger: pinoLogger,
@@ -73,16 +108,26 @@ export function configureApp(app: INestApplication, options: ConfigureAppOptions
     },
   });
 
-  // 0. Request ID validation/generation, AsyncLocalStorage propagation, and HTTP request logging
+  // 0. Request ID validation/generation, locale resolution, AsyncLocalStorage propagation, and HTTP request logging
   expressApp.use((req: Request, res: Response, next: NextFunction) => {
     const requestId = resolveRequestId(req.headers['x-request-id']);
-    (req as Request & { requestId?: string }).requestId = requestId;
-    res.setHeader('X-Request-Id', requestId);
+    const locale = localeService
+      ? localeService.resolveLocale(req.query?.['lang'], req.headers['accept-language'])
+      : resolveFallbackLocale(req);
 
-    runWithRequestContext(requestId, () => {
-      httpLogger(req, res);
-      next();
-    });
+    (req as Request & { requestId?: string; locale?: string }).requestId = requestId;
+    (req as Request & { requestId?: string; locale?: string }).locale = locale;
+    res.setHeader('X-Request-Id', requestId);
+    res.setHeader('Content-Language', locale);
+
+    runWithRequestContext(
+      requestId,
+      () => {
+        httpLogger(req, res);
+        next();
+      },
+      locale,
+    );
   });
 
   // 1. Better Auth receives the raw unparsed request stream (Express 5 wildcard syntax)
@@ -92,12 +137,13 @@ export function configureApp(app: INestApplication, options: ConfigureAppOptions
   expressApp.use('/webhooks', (req: Request, res: Response, next: NextFunction) => {
     const maxBytes = getWebhookMaxBodyBytes();
     const requestId = (req as Request & { requestId?: string }).requestId;
+    const locale = (req as Request & { locale?: string }).locale ?? getDefaultLocale();
     const contentLengthHeader = req.headers['content-length'];
     if (typeof contentLengthHeader === 'string') {
       const declaredLength = Number.parseInt(contentLengthHeader, 10);
       if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
         req.pause();
-        sendPayloadTooLarge(res, maxBytes, requestId);
+        sendPayloadTooLarge(res, maxBytes, locale, requestId);
         return;
       }
     }
@@ -117,7 +163,7 @@ export function configureApp(app: INestApplication, options: ConfigureAppOptions
         chunks.length = 0;
         req.off('data', onData);
         req.pause();
-        sendPayloadTooLarge(res, maxBytes, requestId);
+        sendPayloadTooLarge(res, maxBytes, locale, requestId);
         return;
       }
       chunks.push(buf);

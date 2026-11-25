@@ -292,7 +292,7 @@ describe('Observability: structured logs, request IDs, redaction, and async corr
   it('AC4: 5xx error logs stack server-side with requestId while response returns only generic detail + requestId', async () => {
     const incomingId = 'req-5xx-trace-0001';
     const res = await fetch(`${baseUrl}/__test/obs/boom`, {
-      headers: { 'X-Request-Id': incomingId },
+      headers: { 'X-Request-Id': incomingId, 'Accept-Language': 'en' },
     });
 
     expect(res.status).toBe(500);
@@ -332,7 +332,7 @@ describe('Observability: structured logs, request IDs, redaction, and async corr
 
     const enqueueRes = await fetch(`${baseUrl}/__test/obs/enqueue`, {
       method: 'POST',
-      headers: { 'X-Request-Id': incomingId },
+      headers: { 'X-Request-Id': incomingId, 'Accept-Language': 'en' },
     });
     expect(enqueueRes.status).toBe(201);
     const { eventId } = (await enqueueRes.json()) as { eventId: string };

@@ -15,7 +15,11 @@ export default tseslint.config(
     ...tseslint.configs.disableTypeChecked,
   },
   {
-    files: ['packages/money/src/**/*.ts', 'apps/api/src/modules/finance/**/*.ts'],
+    files: [
+      'packages/money/src/**/*.ts',
+      'packages/i18n/src/format-money.ts',
+      'apps/api/src/modules/finance/**/*.ts',
+    ],
     rules: {
       'no-restricted-globals': [
         'error',
@@ -36,26 +40,29 @@ export default tseslint.config(
         },
         {
           selector: "MemberExpression[object.name='Math'][property.name='round']",
-          message: 'Math.round is forbidden in packages/money. Use explicit RoundingMode on integers/bigints.',
+          message:
+            'Math.round is forbidden in packages/money. Use explicit RoundingMode on integers/bigints.',
         },
         {
           selector: "MemberExpression[object.name='Math'][property.name='floor']",
-          message: 'Math.floor is forbidden in packages/money. Use explicit RoundingMode on integers/bigints.',
+          message:
+            'Math.floor is forbidden in packages/money. Use explicit RoundingMode on integers/bigints.',
         },
         {
           selector: "MemberExpression[object.name='Math'][property.name='ceil']",
-          message: 'Math.ceil is forbidden in packages/money. Use explicit RoundingMode on integers/bigints.',
+          message:
+            'Math.ceil is forbidden in packages/money. Use explicit RoundingMode on integers/bigints.',
         },
         {
-          selector: "TSPropertySignature[key.name=/amount/i] TSTypeAnnotation TSNumberKeyword",
+          selector: 'TSPropertySignature[key.name=/amount/i] TSTypeAnnotation TSNumberKeyword',
           message: 'Use bigint for monetary amounts, number is forbidden.',
         },
         {
-          selector: "PropertyDefinition[key.name=/amount/i] TSTypeAnnotation TSNumberKeyword",
+          selector: 'PropertyDefinition[key.name=/amount/i] TSTypeAnnotation TSNumberKeyword',
           message: 'Use bigint for monetary amounts, number is forbidden.',
         },
         {
-          selector: "Identifier[name=/amount/i] > TSTypeAnnotation TSNumberKeyword",
+          selector: 'Identifier[name=/amount/i] > TSTypeAnnotation TSNumberKeyword',
           message: 'Use bigint for monetary amounts, number is forbidden.',
         },
       ],
