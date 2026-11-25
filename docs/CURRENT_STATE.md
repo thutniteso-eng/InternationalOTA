@@ -1,6 +1,6 @@
 # Current State — 2026-11-26
 
-Phase: **1 complete (implementation)** — Phase 1 → 2 gate awaiting Owner approval. See `reports/PHASE-1-GATE.md`.
+Phase: **2 — Booking core** (approved 2026-11-26, D-019). Phase 1 complete, see `reports/PHASE-1-GATE.md`.
 Repo: github.com/thutniteso-eng/InternationalOTA (public, D-015). Branch protection on `main`: required checks `verify` + `security`. Claude merges accepted PRs (D-016).
 Staging: Owner's WSL + Docker + Cloudflare quick tunnel (D-017), `scripts/staging-up.sh` / `staging-down.sh`; URL changes on each start.
 
@@ -22,9 +22,14 @@ Staging: Owner's WSL + Docker + Cloudflare quick tunnel (D-017), `scripts/stagin
 
 ## Decisions
 Approved/decided: D-001…D-003, D-005…D-017 (see DECISIONS.md). **Open: D-004 merchant model (legal/accounting).**
-Pending product decision: L4 — require verified email before payment? (needed for P2-09).
+D-018: verified email required before payment.
 
 ## Open items outside code
 - Payment gateway choice + sandbox account (Owner) — blocks P2-06 only.
 - Legal/accounting advice for D-004 (Owner) — blocks live sales, not development.
 - Real tour/activity data for pilot (Owner) — needed by P2-01..P2-03 acceptance.
+
+## Phase 2 tasks
+| Task | Status |
+|---|---|
+| P2-01 Catalog (suppliers, tours/activities, vi/en, search, geo) | READY — spec in implementation/tasks |
