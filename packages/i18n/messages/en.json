@@ -47,5 +47,21 @@
   "http.500.detail": "An unexpected internal error occurred",
   "http.502.title": "Bad Gateway",
   "http.503.title": "Service Unavailable",
-  "http.504.title": "Gateway Timeout"
+  "http.504.title": "Gateway Timeout",
+  "supply.notFound": "Supplier was not found.",
+  "supply.invalidCountry": "Invalid ISO 3166-1 country code ({countryAlpha2}).",
+  "supply.validation": "Invalid supplier payload: {reason}.",
+  "catalog.product.notFound": "Product was not found.",
+  "catalog.supplier.notFound": "Referenced supplier was not found.",
+  "catalog.translation.invalidLocale": "Locale \"{locale}\" is not enabled.",
+  "catalog.translation.invalidSlug": "Slug must contain only lowercase letters, numbers, and hyphens.",
+  "catalog.translation.slugConflict": "Slug \"{slug}\" is already in use for locale \"{locale}\".",
+  "catalog.images.tooMany": "A product may have at most 20 images.",
+  "catalog.images.invalidUrl": "Image URLs must use HTTPS.",
+  "catalog.query.invalidParams": "Invalid catalog query parameters: {reason}.",
+  "catalog.publish.supplierSuspended": "Cannot publish product while its supplier is suspended.",
+  "catalog.publish.missingTranslations": "Cannot publish product: missing or incomplete required translations ({locales}).",
+  "catalog.publish.missingLocation": "Cannot publish product: location coordinates are required.",
+  "catalog.publish.missingTimeZone": "Cannot publish product: a valid IANA time zone is required.",
+  "catalog.publish.blocked": "Cannot publish product: missing requirements ({reasons})."
 }
