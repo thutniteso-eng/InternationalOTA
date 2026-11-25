@@ -18,7 +18,8 @@ Task status:
 | P1-07 Idempotency-Key | DONE — merged (PR #9); H1 closed in P1-06 |
 | P1-08 Outbox / jobs / webhook inbox | DONE — merged (PR #14) after W1–W5 corrections |
 | P1-09 Double-entry ledger | DONE — merged (PR #16) after K1–K3 corrections |
-| P1-10 Observability | READY — spec in implementation/tasks |
+| P1-10 Observability | DONE — merged (PR #18) after O1, O2, O4 corrections |
+| P1-11 i18n foundation | READY — spec in implementation/tasks |
 
 No application code exists yet.
 
