@@ -81,7 +81,36 @@ Restoring both deferred constraint triggers made all 7 tests in `ledger.spec.ts`
 
 ## Fresh-Clone Verification
 
-Will be populated with real outputs from `/tmp/p1check-p109` immediately after pushing branch `task/P1-09-ledger`.
+Verified in a fresh clone of `task/P1-09-ledger` at `/tmp/p1check-p109` (commit `c37691e3a0d356f718e2b4d96c41d38e0f45b450`):
+
+```bash
+rm -rf /tmp/p1check-p109
+git clone -b task/P1-09-ledger https://github.com/thutniteso-eng/InternationalOTA.git /tmp/p1check-p109
+cd /tmp/p1check-p109
+pnpm install --frozen-lockfile
+pnpm format:check
+pnpm lint
+pnpm lint:boundaries
+pnpm typecheck
+pnpm build
+DATABASE_URL="postgresql://ota_user:ota_password@localhost:55432/ota_dev" pnpm db:migrate
+DATABASE_URL="postgresql://ota_user:ota_password@localhost:55432/ota_dev" pnpm db:seed
+DATABASE_URL="postgresql://ota_user:ota_password@localhost:55432/ota_dev" pnpm test
+pnpm licenses:check
+pnpm audit --prod --audit-level high
+```
+
+Real results (all commands exited `0`):
+- `pnpm format:check`: `All matched files use Prettier code style!` across all 6 workspace projects + `tools/`.
+- `pnpm lint`: all 6 workspace projects + `eslint tools` passed with 0 errors (including the extended no-float / no-`number`-amount ESLint rule on `apps/api/src/modules/finance/**/*.ts`).
+- `pnpm lint:boundaries`: `✔ no dependency violations found (60 modules, 202 dependencies cruised)`.
+- `pnpm typecheck` & `pnpm build`: all 6 workspace projects built and typechecked cleanly.
+- `pnpm db:migrate` & `pnpm db:seed`: applied `0006_aromatic_hellfire_club.sql` (tables + raw-SQL triggers) and seeded reference data + 10 minimal ledger accounts idempotently.
+- `pnpm test` (Vitest `4.1.12`):
+  - `apps/api`: `Test Files  6 passed (6)` / `Tests  48 passed (48)` (`ledger.spec.ts` 7 covering AC1–AC7, `messaging.spec.ts` 10, `identity.spec.ts` 8, `idempotency.spec.ts` 9, `hash.spec.ts` 11, `health.controller.spec.ts` 3).
+  - `packages/db`: 22 passed; `packages/money`: 41 passed; `packages/time`: 19 passed; `packages/shared`: passed; `apps/web`: 1 passed; `tools`: 16 passed.
+- `pnpm licenses:check`: `✅ All 379 package licenses verified successfully.`
+- `pnpm audit --prod --audit-level high`: exited `0` (0 high, 0 critical; 1 moderate).
 
 ---
 
