@@ -32,9 +32,15 @@ importers:
       '@internationalota/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@internationalota/money':
+        specifier: workspace:*
+        version: link:../../packages/money
       '@internationalota/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@internationalota/time':
+        specifier: workspace:*
+        version: link:../../packages/time
       '@nestjs/common':
         specifier: ^12.4.2
         version: 12.4.2(reflect-metadata@0.2.2)(rxjs@7.8.2)

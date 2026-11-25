@@ -14,7 +14,9 @@
   },
   "dependencies": {
     "@internationalota/db": "workspace:*",
+    "@internationalota/money": "workspace:*",
     "@internationalota/shared": "workspace:*",
+    "@internationalota/time": "workspace:*",
     "@nestjs/common": "^12.4.2",
     "@nestjs/core": "^12.4.2",
     "@nestjs/platform-express": "^12.4.2",

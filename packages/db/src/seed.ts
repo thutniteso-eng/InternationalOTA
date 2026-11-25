@@ -3,7 +3,53 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { sql } from 'drizzle-orm';
 import { createDbClient, type DatabaseClient } from './client.ts';
+import { financeAccounts } from './schema/finance.ts';
 import { countries, currencies, languages, timeZones } from './schema/reference.ts';
+
+export const DEFAULT_CHART_OF_ACCOUNTS = [
+  // VND accounts
+  { code: 'psp_clearing_vnd', name: 'PSP Clearing (VND)', type: 'asset', currency: 'VND' },
+  {
+    code: 'customer_deposits_vnd',
+    name: 'Customer Deposits (VND)',
+    type: 'liability',
+    currency: 'VND',
+  },
+  {
+    code: 'supplier_payables_vnd',
+    name: 'Supplier Payables (VND)',
+    type: 'liability',
+    currency: 'VND',
+  },
+  {
+    code: 'commission_revenue_vnd',
+    name: 'Commission Revenue (VND)',
+    type: 'revenue',
+    currency: 'VND',
+  },
+  { code: 'psp_fees_vnd', name: 'PSP Fees (VND)', type: 'expense', currency: 'VND' },
+  // USD accounts
+  { code: 'psp_clearing_usd', name: 'PSP Clearing (USD)', type: 'asset', currency: 'USD' },
+  {
+    code: 'customer_deposits_usd',
+    name: 'Customer Deposits (USD)',
+    type: 'liability',
+    currency: 'USD',
+  },
+  {
+    code: 'supplier_payables_usd',
+    name: 'Supplier Payables (USD)',
+    type: 'liability',
+    currency: 'USD',
+  },
+  {
+    code: 'commission_revenue_usd',
+    name: 'Commission Revenue (USD)',
+    type: 'revenue',
+    currency: 'USD',
+  },
+  { code: 'psp_fees_usd', name: 'PSP Fees (USD)', type: 'expense', currency: 'USD' },
+] as const;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -17,6 +63,7 @@ export interface SeedResult {
   currencies: number;
   languages: number;
   timeZones: number;
+  accounts: number;
 }
 
 interface CountryJson {
@@ -145,11 +192,35 @@ export async function seedReferenceData(
       }
     }
 
+    // 5. Minimal chart of accounts for VND and USD (P1-09, D-004 open)
+    await tx
+      .insert(financeAccounts)
+      .values(
+        DEFAULT_CHART_OF_ACCOUNTS.map((acct) => ({
+          code: acct.code,
+          name: acct.name,
+          type: acct.type,
+          currency: acct.currency,
+          isActive: true,
+        })),
+      )
+      .onConflictDoUpdate({
+        target: financeAccounts.code,
+        set: {
+          name: sql`excluded.name`,
+          type: sql`excluded.type`,
+          currency: sql`excluded.currency`,
+          updatedAt: sql`now()`,
+        },
+        setWhere: sql`(${financeAccounts.name}, ${financeAccounts.type}, ${financeAccounts.currency}) IS DISTINCT FROM (excluded.name, excluded.type, excluded.currency)`,
+      });
+
     return {
       countries: countriesData.length,
       currencies: currenciesData.length,
       languages: languagesData.length,
       timeZones: timeZonesData.length,
+      accounts: DEFAULT_CHART_OF_ACCOUNTS.length,
     };
   });
 }
@@ -161,7 +232,7 @@ export async function runSeedCli(): Promise<void> {
       console.log('Seeding reference data...');
       const result = await seedReferenceData(db);
       console.log(
-        `Reference data seeded successfully: ${result.countries} countries, ${result.currencies} currencies, ${result.languages} languages, ${result.timeZones} time zones.`,
+        `Reference data seeded successfully: ${result.countries} countries, ${result.currencies} currencies, ${result.languages} languages, ${result.timeZones} time zones, ${result.accounts} ledger accounts.`,
       );
     } finally {
       await pool.end();

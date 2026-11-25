@@ -43,6 +43,13 @@
       "when": 1795598118231,
       "tag": "0005_square_loki",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795600243074,
+      "tag": "0006_aromatic_hellfire_club",
+      "breakpoints": true
     }
   ]
 }
