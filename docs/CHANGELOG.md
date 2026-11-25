@@ -18,3 +18,4 @@
 - P1-06 reviewed at 6d039bf: ACCEPTED WITH LIMITATIONS (6/6 mutations killed; L1–L3 → P1-12; L4 email verification before payment = Phase 2 decision). Approved upgrades: vitest 4.1, drizzle-kit 0.31, better-auth 1.7.28 exact. Branch protection now active (public repo). Added TASK-P1-08 spec.
 - P1-06 merged (PR #12). D-016: Owner delegated merging of Claude-ACCEPTED, CI-green PRs to Claude.
 - P1-08 merged (PR #14) after W1 (unsigned header dedupe bypass) and W2 (unbounded body) were proven and fixed. Added TASK-P1-09 spec.
+- P1-09 merged (PR #16) after K1 (append to old entry), K2 (TRUNCATE), K3 (account currency change) were proven and fixed. Added TASK-P1-10 spec.

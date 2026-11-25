@@ -17,7 +17,8 @@ Task status:
 | P1-06 Identity | DONE — merged (PR #12); L1–L3 → P1-12, L4 Phase 2 decision |
 | P1-07 Idempotency-Key | DONE — merged (PR #9); H1 closed in P1-06 |
 | P1-08 Outbox / jobs / webhook inbox | DONE — merged (PR #14) after W1–W5 corrections |
-| P1-09 Double-entry ledger | READY — spec in implementation/tasks |
+| P1-09 Double-entry ledger | DONE — merged (PR #16) after K1–K3 corrections |
+| P1-10 Observability | READY — spec in implementation/tasks |
 
 No application code exists yet.
 
@@ -25,4 +26,4 @@ Note: GitHub branch protection / rulesets are NOT available for private repos on
 
 Note (2026-11-25): repository made public (D-015); GitHub Actions runs again; branch protection on `main` active (required checks `verify`, `security`, no approvals, no force push).
 
-Carry-overs for P1-12 (staging): from P1-06 review — L1 trusted proxy/client IP for rate limiting, L2 fail-fast on missing auth base URL / trusted origins outside local dev, L3 Secure cookies derived from base URL scheme.
+Carry-overs for P1-12 (staging): from P1-06 review — L1 trusted proxy/client IP for rate limiting, L2 fail-fast on missing auth base URL / trusted origins outside local dev, L3 Secure cookies derived from base URL scheme; from P1-09 review — app DB role must not own `finance` tables (migrations as owner role, app as limited role).
