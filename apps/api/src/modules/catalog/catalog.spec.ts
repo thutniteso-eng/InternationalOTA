@@ -190,6 +190,26 @@ describe('Supply & Catalog modules integration tests (P2-01)', () => {
     return { status: res.status, body: (await res.json()) as T };
   }
 
+  async function adminPatch<T>(
+    path: string,
+    body: unknown,
+    key = nextIdemKey(),
+  ): Promise<{
+    status: number;
+    body: T;
+  }> {
+    const res = await fetch(`${baseUrl}${path}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: adminCookie,
+        'Idempotency-Key': key,
+      },
+      body: JSON.stringify(body),
+    });
+    return { status: res.status, body: (await res.json()) as T };
+  }
+
   it('AC7: anonymous returns 401, customer returns 403 on admin endpoints, and @Idempotent replays identical create response', async () => {
     const anonRes = await fetch(`${baseUrl}/admin/suppliers`, {
       method: 'POST',
@@ -651,5 +671,234 @@ describe('Supply & Catalog modules integration tests (P2-01)', () => {
       if (savedAppEnv === undefined) delete process.env['APP_ENV'];
       else process.env['APP_ENV'] = savedAppEnv;
     }
+  });
+
+  it('R1: rejects clearing location or invalidating timeZone on a published product via API (422) and raw SQL (23514)', async () => {
+    const sup = await adminPost<SupplierRecord>('/admin/suppliers', {
+      name: 'Published Invariant Supplier',
+      countryAlpha2: 'VN',
+    });
+
+    // Draft product CAN clear location
+    const draftProd = (
+      await adminPost<AdminCatalogProductDto>('/admin/products', {
+        supplierId: sup.body.id,
+        kind: 'tour',
+        countryAlpha2: 'VN',
+        region: 'Phú Quốc',
+        location: { lat: 10.22, lng: 103.96 },
+      })
+    ).body;
+    const clearedDraft = await adminPatch<AdminCatalogProductDto>(
+      `/admin/products/${draftProd.id}`,
+      {
+        location: null,
+      },
+    );
+    expect(clearedDraft.status).toBe(200);
+    expect(clearedDraft.body.location).toBeNull();
+
+    // Published product MUST reject clearing location or invalidating/clearing timeZone with 422 + i18nKey
+    const pubProd = (
+      await adminPost<AdminCatalogProductDto>('/admin/products', {
+        supplierId: sup.body.id,
+        kind: 'tour',
+        countryAlpha2: 'VN',
+        region: 'Phú Quốc',
+        location: { lat: 10.22, lng: 103.96 },
+        timeZone: 'Asia/Ho_Chi_Minh',
+      })
+    ).body;
+    await adminPut(`/admin/products/${pubProd.id}/translations/vi`, {
+      title: 'Tour Đã Xuất Bản',
+      slug: `tour-da-xuat-ban-${pubProd.id.slice(-8)}`,
+      summary: 'Tóm tắt tour đã xuất bản',
+      description: 'Chi tiết tour đã xuất bản',
+    });
+    await adminPut(`/admin/products/${pubProd.id}/translations/en`, {
+      title: 'Published Invariant Tour',
+      slug: `published-invariant-tour-${pubProd.id.slice(-8)}`,
+      summary: 'Published invariant summary',
+      description: 'Published invariant details',
+    });
+    const pubRes = await adminPost<AdminCatalogProductDto>(`/admin/products/${pubProd.id}/publish`);
+    expect(pubRes.status).toBe(200);
+    expect(pubRes.body.status).toBe('published');
+
+    const nullLocRes = await adminPatch<Record<string, unknown>>(`/admin/products/${pubProd.id}`, {
+      location: null,
+    });
+    expect(nullLocRes.status).toBe(422);
+    expect(nullLocRes.body['i18nKey']).toBe('catalog.publish.missingLocation');
+    expect(nullLocRes.body['code']).toBe('catalog.publish.missingLocation');
+
+    for (const badTz of [null, '', '   ', 'Invalid/Timezone']) {
+      const badTzRes = await adminPatch<Record<string, unknown>>(`/admin/products/${pubProd.id}`, {
+        timeZone: badTz,
+      });
+      expect(badTzRes.status).toBe(422);
+      expect(badTzRes.body['i18nKey']).toBe('catalog.publish.missingTimeZone');
+      expect(badTzRes.body['code']).toBe('catalog.publish.missingTimeZone');
+    }
+
+    // Verify published row still has its valid location and timeZone
+    const stillValidRes = await fetch(`${baseUrl}/admin/products/${pubProd.id}`, {
+      headers: { Cookie: adminCookie },
+    });
+    expect(stillValidRes.status).toBe(200);
+    const stillValid = (await stillValidRes.json()) as AdminCatalogProductDto;
+    expect(stillValid.location).toEqual({ lat: 10.22, lng: 103.96 });
+    expect(stillValid.timeZone).toBe('Asia/Ho_Chi_Minh');
+
+    // Raw SQL UPDATE SET location = NULL on a published row MUST fail with SQLSTATE 23514
+    let pgCode: string | undefined;
+    try {
+      await testDb.pool.query('UPDATE catalog.products SET location = NULL WHERE id = $1::uuid', [
+        pubProd.id,
+      ]);
+    } catch (err: unknown) {
+      pgCode =
+        typeof err === 'object' && err !== null && 'code' in err ? String(err.code) : undefined;
+    }
+    expect(pgCode).toBe('23514');
+  });
+
+  it('R2: geo cursor pagination over 27 products with limit=10 has no duplicates/gaps, non-decreasing distances, and id ASC tie-breaking', async () => {
+    const sup = await adminPost<SupplierRecord>('/admin/suppliers', {
+      name: 'Geo Cursor Supplier',
+      countryAlpha2: 'VN',
+    });
+
+    // Center: 10.2200, 103.9600 (Phu Quoc), radiusKm = 50
+    // 8 closer products + 4 identical-point products straddling the page-1/page-2 boundary + 15 farther products = 27 in-radius
+    const coords: Array<{ lat: number; lng: number; identicalGroup: boolean }> = [
+      ...Array.from({ length: 8 }, (_, i) => ({
+        lat: 10.221 + i * 0.0005,
+        lng: 103.96,
+        identicalGroup: false,
+      })),
+      ...Array.from({ length: 4 }, () => ({
+        lat: 10.23,
+        lng: 103.97,
+        identicalGroup: true,
+      })),
+      ...Array.from({ length: 15 }, (_, i) => ({
+        lat: 10.24 + i * 0.015,
+        lng: 103.96,
+        identicalGroup: false,
+      })),
+    ];
+
+    const expectedIds: string[] = [];
+    const identicalPointIds: string[] = [];
+
+    for (let i = 0; i < coords.length; i++) {
+      const point = coords[i]!;
+      const created = (
+        await adminPost<AdminCatalogProductDto>('/admin/products', {
+          supplierId: sup.body.id,
+          kind: 'tour',
+          countryAlpha2: 'VN',
+          region: 'Phú Quốc',
+          location: { lat: point.lat, lng: point.lng },
+        })
+      ).body;
+      expectedIds.push(created.id);
+      if (point.identicalGroup) {
+        identicalPointIds.push(created.id);
+      }
+
+      await adminPut(`/admin/products/${created.id}/translations/vi`, {
+        title: `GeoCursorTour ${i}`,
+        slug: `geo-cursor-tour-${i}`,
+        summary: `Tóm tắt GeoCursorTour ${i}`,
+        description: `Chi tiết GeoCursorTour ${i}`,
+      });
+      await adminPut(`/admin/products/${created.id}/translations/en`, {
+        title: `GeoCursorTour EN ${i}`,
+        slug: `geo-cursor-tour-en-${i}`,
+        summary: `Summary GeoCursorTour ${i}`,
+        description: `Description GeoCursorTour ${i}`,
+      });
+      const pubRes = await adminPost<AdminCatalogProductDto>(
+        `/admin/products/${created.id}/publish`,
+      );
+      expect(pubRes.status).toBe(200);
+    }
+
+    // Outside-radius decoy (> 250 km away) matching the same search term must be excluded
+    const decoy = (
+      await adminPost<AdminCatalogProductDto>('/admin/products', {
+        supplierId: sup.body.id,
+        kind: 'tour',
+        countryAlpha2: 'VN',
+        region: 'TP.HCM',
+        location: { lat: 10.7769, lng: 106.7009 },
+      })
+    ).body;
+    await adminPut(`/admin/products/${decoy.id}/translations/vi`, {
+      title: 'GeoCursorTour Outside Decoy',
+      slug: 'geo-cursor-tour-outside-decoy',
+      summary: 'Tóm tắt ngoài vùng',
+      description: 'Chi tiết ngoài vùng',
+    });
+    await adminPut(`/admin/products/${decoy.id}/translations/en`, {
+      title: 'GeoCursorTour Outside Decoy EN',
+      slug: 'geo-cursor-tour-outside-decoy-en',
+      summary: 'Outside summary',
+      description: 'Outside description',
+    });
+    expect(
+      (await adminPost<AdminCatalogProductDto>(`/admin/products/${decoy.id}/publish`)).status,
+    ).toBe(200);
+
+    const collectedIds: string[] = [];
+    const collectedDistances: number[] = [];
+    let cursor: string | null = null;
+    let pageCount = 0;
+
+    do {
+      const qs = new URLSearchParams({
+        locale: 'vi',
+        q: 'GeoCursorTour',
+        near: '10.2200,103.9600',
+        radiusKm: '50',
+        limit: '10',
+        ...(cursor ? { cursor } : {}),
+      });
+      const res = await fetch(`${baseUrl}/catalog/products?${qs.toString()}`);
+      expect(res.status).toBe(200);
+      const page = (await res.json()) as PublicCatalogListResponse;
+      pageCount++;
+
+      for (const item of page.items) {
+        collectedIds.push(item.id);
+        expect(typeof item.distanceMeters).toBe('number');
+        collectedDistances.push(item.distanceMeters!);
+      }
+
+      cursor = page.nextCursor;
+      expect(pageCount).toBeLessThanOrEqual(5);
+    } while (cursor !== null);
+
+    expect(pageCount).toBe(3);
+    expect(collectedIds).toHaveLength(27);
+    expect(new Set(collectedIds).size).toBe(27);
+    for (const id of expectedIds) {
+      expect(collectedIds).toContain(id);
+    }
+    expect(collectedIds).not.toContain(decoy.id);
+
+    // Distances must be non-decreasing across the full multi-page walk
+    for (let i = 1; i < collectedDistances.length; i++) {
+      expect(collectedDistances[i]!).toBeGreaterThanOrEqual(collectedDistances[i - 1]!);
+    }
+
+    // Identical-point items straddling page boundary must preserve ascending UUID order
+    const identicalSet = new Set(identicalPointIds);
+    const observedIdenticalOrder = collectedIds.filter((id) => identicalSet.has(id));
+    expect(observedIdenticalOrder).toHaveLength(4);
+    const sortedIdenticalOrder = [...identicalPointIds].sort();
+    expect(observedIdenticalOrder).toEqual(sortedIdenticalOrder);
   });
 });

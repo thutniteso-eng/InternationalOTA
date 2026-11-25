@@ -63,6 +63,7 @@ export const catalogProducts = catalogSchema.table(
     check('products_status_check', sql`status IN ('draft', 'published', 'archived')`),
     check('products_duration_minutes_check', sql`duration_minutes IS NULL OR duration_minutes > 0`),
     check('products_time_zone_non_empty_check', sql`length(trim(time_zone)) > 0`),
+    check('products_published_location_check', sql`status <> 'published' OR location IS NOT NULL`),
     index('products_published_listing_idx').on(table.status, table.publishedAt, table.id),
     index('products_supplier_idx').on(table.supplierId),
   ],

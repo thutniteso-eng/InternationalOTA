@@ -119,6 +119,34 @@ $ docker compose -f deploy/staging/compose.yml exec -T -e PGPASSWORD="$OTA_APP_P
 - `pnpm typecheck`: passed
 - `pnpm build`: passed
 - `pnpm db:generate`: `No schema changes, nothing to migrate` (21 tables)
-- `pnpm test`: passed (`apps/api` 11 files / 79 tests passed, plus all workspace packages and `tools`)
+- `pnpm test`: passed (`apps/api` 11 files / 81 tests passed, plus all workspace packages and `tools`)
 - `pnpm licenses:check`: passed (`All 471 package licenses verified successfully`)
 - `pnpm audit --prod --audit-level high`: passed (exit 0)
+
+---
+
+## Corrections (R1–R2)
+
+### R1 — Published product invariant + transactional `FOR UPDATE` locking
+- **Forward-only migration** (`packages/db/migrations/0009_easy_machine_man.sql` + `packages/db/src/schema/catalog.ts`):
+  ```sql
+  ALTER TABLE "catalog"."products" ADD CONSTRAINT "products_published_location_check" CHECK (status <> 'published' OR location IS NOT NULL);
+  ```
+- **Service guards** (`apps/api/src/modules/catalog/catalog.service.ts`):
+  - `loadProductRow(id, tx?)` accepts an optional transaction runner and acquires `FOR UPDATE` when called inside a transaction.
+  - `updateProduct` runs in a transaction with `FOR UPDATE`, rejecting `{ location: null }` and empty/null/invalid `timeZone` updates on `published` products with HTTP `422` (`i18nKey: "catalog.publish.missingLocation"` / `"catalog.publish.missingTimeZone"`).
+  - `publishProduct` runs in a transaction taking `SELECT ... FOR UPDATE` on the product row before running checks and updating status.
+- **Automated tests** (`apps/api/src/modules/catalog/catalog.spec.ts`): verified HTTP `422` (`i18nKey` + `code`) when updating `published` product with `location: null` or invalid/`null`/blank `timeZone`, and verified raw SQL `UPDATE catalog.products SET location = NULL WHERE id = $1::uuid` fails with PostgreSQL SQLSTATE `23514`.
+
+### R2 — Geo cursor pagination test + Mutation M2 verification
+- Added `R2: geo cursor pagination over 27 products with limit=10 has no duplicates/gaps, non-decreasing distances, and id ASC tie-breaking` in `apps/api/src/modules/catalog/catalog.spec.ts`:
+  - Pages through 27 published products within `radiusKm=50` at `limit=10` (plus an outside-radius decoy that is excluded), including 4 products at identical coordinates straddling the page-1/page-2 boundary.
+  - Asserts 3 pages, 27 unique IDs, zero duplicates, zero gaps, non-decreasing `distanceMeters`, and deterministic ascending UUID tie-breaking.
+- **Mutation M2 kill evidence** (`sub.distance_meters >` mutated to `>=` in `apps/api/src/modules/catalog/catalog.service.ts`):
+  ```text
+  × src/modules/catalog/catalog.spec.ts > Supply & Catalog modules integration tests (P2-01) > R2: geo cursor pagination over 27 products with limit=10 has no duplicates/gaps, non-decreasing distances, and id ASC tie-breaking 1716ms
+    → expected [ …(30) ] to have a length of 27 but got 30
+  Test Files  1 failed (1)
+       Tests  1 failed | 6 passed (7)
+  ```
+- Reverted M2 and re-verified full workspace checks: `apps/api` 11 files / `81 passed (81)`.

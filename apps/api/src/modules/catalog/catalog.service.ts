@@ -283,11 +283,15 @@ export class CatalogService {
     return rawKind as ProductKind;
   }
 
-  private async loadProductRow(id: string): Promise<ProductDbRow> {
+  private async loadProductRow(
+    id: string,
+    tx?: Pick<DatabaseClient, 'select'>,
+  ): Promise<ProductDbRow> {
     if (!UUID_REGEX.test(id)) {
       throw catalogProductNotFoundException();
     }
-    const [row] = await this.db
+    const runner = tx ?? this.db;
+    const baseQuery = runner
       .select({
         id: catalogProducts.id,
         supplierId: catalogProducts.supplierId,
@@ -310,6 +314,8 @@ export class CatalogService {
       })
       .from(catalogProducts)
       .where(eq(catalogProducts.id, id));
+
+    const [row] = tx ? await baseQuery.for('update') : await baseQuery;
 
     if (!row) {
       throw catalogProductNotFoundException();
@@ -396,54 +402,78 @@ export class CatalogService {
   }
 
   async updateProduct(id: string, input: UpdateProductInput): Promise<AdminCatalogProductDto> {
-    await this.loadProductRow(id);
+    await this.db.transaction(async (tx) => {
+      const existing = await this.loadProductRow(id, tx);
+      const isPublished = existing.status === 'published';
 
-    const setValues: Record<string, unknown> = {
-      updatedAt: sql`now()`,
-    };
+      const setValues: Record<string, unknown> = {
+        updatedAt: sql`now()`,
+      };
 
-    if (input.kind !== undefined) {
-      setValues['kind'] = this.assertKind(input.kind);
-    }
-    if (input.countryAlpha2 !== undefined) {
-      setValues['countryAlpha2'] = await this.assertCountryExists(input.countryAlpha2);
-    }
-    if (input.region !== undefined) {
-      const region = typeof input.region === 'string' ? input.region.trim() : '';
-      if (!region) {
-        throw catalogInvalidQueryException('region cannot be empty');
+      if (input.kind !== undefined) {
+        setValues['kind'] = this.assertKind(input.kind);
       }
-      setValues['region'] = region;
-    }
-    if (input.location !== undefined) {
-      if (input.location === null) {
-        setValues['location'] = null;
-      } else {
-        const point = validateGeoPoint(input.location);
-        setValues['location'] =
-          sql`ST_SetSRID(ST_MakePoint(${point.lng}, ${point.lat}), 4326)::geography`;
+      if (input.countryAlpha2 !== undefined) {
+        setValues['countryAlpha2'] = await this.assertCountryExists(input.countryAlpha2);
       }
-    }
-    if (input.meetingPointNote !== undefined) {
-      setValues['meetingPointNote'] =
-        typeof input.meetingPointNote === 'string' && input.meetingPointNote.trim().length > 0
-          ? input.meetingPointNote.trim()
-          : null;
-    }
-    if (input.timeZone !== undefined) {
-      setValues['timeZone'] = this.assertTimeZone(input.timeZone);
-    }
-    if (input.durationMinutes !== undefined) {
-      if (input.durationMinutes === null) {
-        setValues['durationMinutes'] = null;
-      } else if (!Number.isInteger(input.durationMinutes) || input.durationMinutes <= 0) {
-        throw catalogInvalidQueryException('durationMinutes must be a positive integer');
-      } else {
-        setValues['durationMinutes'] = input.durationMinutes;
+      if (input.region !== undefined) {
+        const region = typeof input.region === 'string' ? input.region.trim() : '';
+        if (!region) {
+          throw catalogInvalidQueryException('region cannot be empty');
+        }
+        setValues['region'] = region;
       }
-    }
+      if (input.location !== undefined) {
+        if (input.location === null) {
+          if (isPublished) {
+            throw catalogPublishBlockedException({
+              supplierSuspended: false,
+              missingLocales: [],
+              missingLocation: true,
+              missingTimeZone: false,
+            });
+          }
+          setValues['location'] = null;
+        } else {
+          const point = validateGeoPoint(input.location);
+          setValues['location'] =
+            sql`ST_SetSRID(ST_MakePoint(${point.lng}, ${point.lat}), 4326)::geography`;
+        }
+      }
+      if (input.meetingPointNote !== undefined) {
+        setValues['meetingPointNote'] =
+          typeof input.meetingPointNote === 'string' && input.meetingPointNote.trim().length > 0
+            ? input.meetingPointNote.trim()
+            : null;
+      }
+      if (input.timeZone !== undefined) {
+        const rawTz: unknown = input.timeZone;
+        if (
+          isPublished &&
+          (typeof rawTz !== 'string' || !rawTz.trim() || !isValidTimeZone(rawTz.trim()))
+        ) {
+          throw catalogPublishBlockedException({
+            supplierSuspended: false,
+            missingLocales: [],
+            missingLocation: false,
+            missingTimeZone: true,
+          });
+        }
+        setValues['timeZone'] = this.assertTimeZone(rawTz as string);
+      }
+      if (input.durationMinutes !== undefined) {
+        if (input.durationMinutes === null) {
+          setValues['durationMinutes'] = null;
+        } else if (!Number.isInteger(input.durationMinutes) || input.durationMinutes <= 0) {
+          throw catalogInvalidQueryException('durationMinutes must be a positive integer');
+        } else {
+          setValues['durationMinutes'] = input.durationMinutes;
+        }
+      }
 
-    await this.db.update(catalogProducts).set(setValues).where(eq(catalogProducts.id, id));
+      await tx.update(catalogProducts).set(setValues).where(eq(catalogProducts.id, id));
+    });
+
     return this.getAdminProductById(id);
   }
 
@@ -569,52 +599,54 @@ export class CatalogService {
   }
 
   async publishProduct(id: string): Promise<AdminCatalogProductDto> {
-    const product = await this.loadProductRow(id);
-    const enabledLocales = this.localeService.getEnabledLocales();
+    await this.db.transaction(async (tx) => {
+      const product = await this.loadProductRow(id, tx);
+      const enabledLocales = this.localeService.getEnabledLocales();
 
-    const [supplierActive, translations] = await Promise.all([
-      this.supplyService.isSupplierActive(product.supplierId),
-      this.db
-        .select()
-        .from(catalogProductTranslations)
-        .where(eq(catalogProductTranslations.productId, id)),
-    ]);
+      const [supplierActive, translations] = await Promise.all([
+        this.supplyService.isSupplierActive(product.supplierId),
+        tx
+          .select()
+          .from(catalogProductTranslations)
+          .where(eq(catalogProductTranslations.productId, id)),
+      ]);
 
-    const translationMap = new Map(translations.map((tr) => [tr.locale, tr]));
-    const missingLocales: string[] = [];
+      const translationMap = new Map(translations.map((tr) => [tr.locale, tr]));
+      const missingLocales: string[] = [];
 
-    for (const loc of enabledLocales) {
-      const tr = translationMap.get(loc);
-      if (
-        !tr ||
-        tr.title.trim().length === 0 ||
-        tr.summary.trim().length === 0 ||
-        tr.description.trim().length === 0
-      ) {
-        missingLocales.push(loc);
+      for (const loc of enabledLocales) {
+        const tr = translationMap.get(loc);
+        if (
+          !tr ||
+          tr.title.trim().length === 0 ||
+          tr.summary.trim().length === 0 ||
+          tr.description.trim().length === 0
+        ) {
+          missingLocales.push(loc);
+        }
       }
-    }
 
-    const missingLocation = product.lat === null || product.lng === null;
-    const missingTimeZone = !product.timeZone || !isValidTimeZone(product.timeZone);
+      const missingLocation = product.lat === null || product.lng === null;
+      const missingTimeZone = !product.timeZone || !isValidTimeZone(product.timeZone);
 
-    if (!supplierActive || missingLocales.length > 0 || missingLocation || missingTimeZone) {
-      throw catalogPublishBlockedException({
-        supplierSuspended: !supplierActive,
-        missingLocales,
-        missingLocation,
-        missingTimeZone,
-      });
-    }
+      if (!supplierActive || missingLocales.length > 0 || missingLocation || missingTimeZone) {
+        throw catalogPublishBlockedException({
+          supplierSuspended: !supplierActive,
+          missingLocales,
+          missingLocation,
+          missingTimeZone,
+        });
+      }
 
-    await this.db
-      .update(catalogProducts)
-      .set({
-        status: 'published',
-        publishedAt: product.publishedAt ?? sql`now()`,
-        updatedAt: sql`now()`,
-      })
-      .where(eq(catalogProducts.id, id));
+      await tx
+        .update(catalogProducts)
+        .set({
+          status: 'published',
+          publishedAt: product.publishedAt ?? sql`now()`,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(catalogProducts.id, id));
+    });
 
     return this.getAdminProductById(id);
   }
