@@ -1,0 +1,846 @@
+{
+  "_meta": {
+    "purpose": "DEMO data for development and staging only. Not real offers. Supplier names are fictional.",
+    "pricesBasis": "Indicative VND prices based on public market ranges for Phu Quoc day tours, Nov 2026. Not the price list of any real operator.",
+    "coordinates": "Approximate (WGS84).",
+    "timeZone": "Asia/Ho_Chi_Minh",
+    "loadRules": "Load in local and staging only (APP_ENV != production)."
+  },
+  "suppliers": [
+    {
+      "key": "demo-sup-ngoc-bien",
+      "name": "Ngọc Biển Travel (Demo)",
+      "countryAlpha2": "VN",
+      "status": "active",
+      "contactEmail": "ops@ngocbien.demo.invalid",
+      "contactPhone": "+84 000 000 001"
+    },
+    {
+      "key": "demo-sup-hoang-hon",
+      "name": "Hoàng Hôn Marine (Demo)",
+      "countryAlpha2": "VN",
+      "status": "active",
+      "contactEmail": "booking@hoanghon.demo.invalid",
+      "contactPhone": "+84 000 000 002"
+    },
+    {
+      "key": "demo-sup-dao-ngoc-transfer",
+      "name": "Đảo Ngọc Transfer (Demo)",
+      "countryAlpha2": "VN",
+      "status": "active",
+      "contactEmail": "dispatch@daongoc.demo.invalid",
+      "contactPhone": "+84 000 000 003"
+    }
+  ],
+  "products": [
+    {
+      "key": "south-4-islands-speedboat",
+      "supplier": "demo-sup-ngoc-bien",
+      "kind": "tour",
+      "region": "Phú Quốc",
+      "location": {
+        "lat": 10.0219,
+        "lng": 104.0089
+      },
+      "meetingPoint": "Cảng An Thới / An Thoi Port (đón tại khách sạn khu Dương Đông, Bãi Trường)",
+      "durationMinutes": 540,
+      "departureTimes": [
+        "08:00"
+      ],
+      "operatingDays": "daily",
+      "capacityPerDeparture": 40,
+      "minPax": 1,
+      "pricing": {
+        "currency": "VND",
+        "perPerson": {
+          "adult": 950000,
+          "child": 650000,
+          "infant": 0
+        },
+        "ageBands": {
+          "adult": "10+",
+          "child": "5-9",
+          "infant": "0-4"
+        }
+      },
+      "cancellationPolicy": {
+        "rules": [
+          {
+            "hoursBeforeStart": 48,
+            "refundPercent": 100
+          },
+          {
+            "hoursBeforeStart": 24,
+            "refundPercent": 50
+          },
+          {
+            "hoursBeforeStart": 0,
+            "refundPercent": 0
+          }
+        ],
+        "weatherCancellationBySupplier": "full_refund_or_reschedule"
+      },
+      "translations": {
+        "vi": {
+          "title": "Tour cano 4 đảo Nam Phú Quốc – lặn ngắm san hô",
+          "slug": "tour-cano-4-dao-nam-phu-quoc",
+          "summary": "Một ngày khám phá Hòn Móng Tay, Hòn Gầm Ghì, Hòn Mây Rút và Hòn Thơm bằng cano cao tốc, lặn ống thở ngắm san hô và ăn trưa hải sản.",
+          "description": "Xe đón quý khách tại khách sạn và đưa về cảng An Thới. Cano đưa đoàn lần lượt ghé Hòn Móng Tay với bãi cát trắng, Hòn Gầm Ghì để lặn ống thở ngắm san hô, nghỉ trưa và tắm biển ở Hòn Mây Rút, cuối ngày dừng tại Hòn Thơm. Lịch trình có thể thay đổi theo thời tiết và hướng gió.",
+          "highlights": [
+            "Lặn ống thở ngắm san hô tại Hòn Gầm Ghì",
+            "Bãi cát trắng Hòn Móng Tay",
+            "Ăn trưa hải sản trên đảo"
+          ],
+          "inclusions": [
+            "Xe đưa đón khách sạn khu trung tâm",
+            "Cano cao tốc, áo phao",
+            "Kính và ống thở",
+            "Bữa trưa",
+            "Nước suối",
+            "Hướng dẫn viên tiếng Việt/tiếng Anh",
+            "Bảo hiểm du lịch"
+          ],
+          "exclusions": [
+            "Vé cáp treo Hòn Thơm",
+            "Đồ uống có cồn",
+            "Chi phí cá nhân"
+          ]
+        },
+        "en": {
+          "title": "South Phu Quoc 4-Island Speedboat Tour with Snorkeling",
+          "slug": "south-phu-quoc-4-island-speedboat-tour",
+          "summary": "A full day hopping between Mong Tay, Gam Ghi, May Rut and Hon Thom islands by speedboat, with snorkeling and a seafood lunch.",
+          "description": "Hotel pick-up and transfer to An Thoi port. The speedboat visits Mong Tay Island's white-sand beach, Gam Ghi Island for snorkeling over coral reefs, May Rut Island for lunch and swimming, and finishes at Hon Thom. The route may change with weather and wind.",
+          "highlights": [
+            "Snorkeling over coral at Gam Ghi Island",
+            "White-sand beach at Mong Tay",
+            "Seafood lunch on the island"
+          ],
+          "inclusions": [
+            "Hotel transfers in central areas",
+            "Speedboat and life jackets",
+            "Snorkeling mask and tube",
+            "Lunch",
+            "Drinking water",
+            "Vietnamese/English guide",
+            "Travel insurance"
+          ],
+          "exclusions": [
+            "Hon Thom cable car ticket",
+            "Alcoholic drinks",
+            "Personal expenses"
+          ]
+        }
+      }
+    },
+    {
+      "key": "south-4-islands-with-cable-car",
+      "supplier": "demo-sup-ngoc-bien",
+      "kind": "tour",
+      "region": "Phú Quốc",
+      "location": {
+        "lat": 10.0219,
+        "lng": 104.0089
+      },
+      "meetingPoint": "Cảng An Thới / An Thoi Port (có đón khách sạn)",
+      "durationMinutes": 600,
+      "departureTimes": [
+        "07:45"
+      ],
+      "operatingDays": "daily",
+      "capacityPerDeparture": 35,
+      "minPax": 1,
+      "pricing": {
+        "currency": "VND",
+        "perPerson": {
+          "adult": 1450000,
+          "child": 1050000,
+          "infant": 0
+        },
+        "ageBands": {
+          "adult": "10+",
+          "child": "5-9",
+          "infant": "0-4"
+        }
+      },
+      "cancellationPolicy": {
+        "rules": [
+          {
+            "hoursBeforeStart": 48,
+            "refundPercent": 100
+          },
+          {
+            "hoursBeforeStart": 24,
+            "refundPercent": 50
+          },
+          {
+            "hoursBeforeStart": 0,
+            "refundPercent": 0
+          }
+        ],
+        "weatherCancellationBySupplier": "full_refund_or_reschedule"
+      },
+      "translations": {
+        "vi": {
+          "title": "Tour cano 4 đảo kết hợp cáp treo Hòn Thơm",
+          "slug": "tour-cano-4-dao-ket-hop-cap-treo-hon-thom",
+          "summary": "Tour 4 đảo bằng cano kèm vé cáp treo vượt biển ra Hòn Thơm, phù hợp gia đình muốn trọn gói trong một ngày.",
+          "description": "Lịch trình như tour 4 đảo Nam Phú Quốc, bổ sung chặng cáp treo vượt biển ra Hòn Thơm và thời gian tự do vui chơi tại đảo. Giờ đi cáp treo phụ thuộc lịch vận hành trong ngày.",
+          "highlights": [
+            "Cáp treo vượt biển ngắm toàn cảnh quần đảo An Thới",
+            "Lặn ngắm san hô",
+            "Trọn gói đưa đón trong ngày"
+          ],
+          "inclusions": [
+            "Xe đưa đón",
+            "Cano, áo phao, dụng cụ lặn ống thở",
+            "Vé cáp treo khứ hồi",
+            "Bữa trưa",
+            "Hướng dẫn viên",
+            "Bảo hiểm"
+          ],
+          "exclusions": [
+            "Trò chơi tính phí riêng tại đảo",
+            "Chi phí cá nhân"
+          ]
+        },
+        "en": {
+          "title": "4-Island Speedboat Tour with Hon Thom Cable Car",
+          "slug": "4-island-speedboat-tour-with-hon-thom-cable-car",
+          "summary": "The classic 4-island speedboat day plus a return sea-crossing cable car ticket to Hon Thom — an all-in-one family day.",
+          "description": "Same island route as the South Phu Quoc speedboat tour, with an added cable car ride across the sea to Hon Thom and free time on the island. Cable car timing depends on the day's operating schedule.",
+          "highlights": [
+            "Sea-crossing cable car views over the An Thoi archipelago",
+            "Snorkeling over coral",
+            "Full-day transfers included"
+          ],
+          "inclusions": [
+            "Transfers",
+            "Speedboat, life jackets, snorkel gear",
+            "Return cable car ticket",
+            "Lunch",
+            "Guide",
+            "Insurance"
+          ],
+          "exclusions": [
+            "Separately charged rides on the island",
+            "Personal expenses"
+          ]
+        }
+      }
+    },
+    {
+      "key": "sunset-squid-fishing",
+      "supplier": "demo-sup-hoang-hon",
+      "kind": "activity",
+      "region": "Phú Quốc",
+      "location": {
+        "lat": 10.0225,
+        "lng": 104.0101
+      },
+      "meetingPoint": "Bến tàu An Thới (đón khách sạn 16:15)",
+      "durationMinutes": 240,
+      "departureTimes": [
+        "17:00"
+      ],
+      "operatingDays": "daily",
+      "capacityPerDeparture": 30,
+      "minPax": 1,
+      "pricing": {
+        "currency": "VND",
+        "perPerson": {
+          "adult": 350000,
+          "child": 250000,
+          "infant": 0
+        },
+        "ageBands": {
+          "adult": "10+",
+          "child": "5-9",
+          "infant": "0-4"
+        }
+      },
+      "cancellationPolicy": {
+        "rules": [
+          {
+            "hoursBeforeStart": 24,
+            "refundPercent": 100
+          },
+          {
+            "hoursBeforeStart": 0,
+            "refundPercent": 0
+          }
+        ],
+        "weatherCancellationBySupplier": "full_refund_or_reschedule"
+      },
+      "translations": {
+        "vi": {
+          "title": "Câu mực đêm và ngắm hoàng hôn trên biển",
+          "slug": "cau-muc-dem-ngam-hoang-hon",
+          "summary": "Lên tàu lúc chiều tà, ngắm hoàng hôn, câu mực cùng ngư dân và thưởng thức mực tươi ngay trên tàu.",
+          "description": "Tàu rời bến khoảng 17:00, chạy ra vùng biển lặng để ngắm hoàng hôn. Khi trời tối, đèn câu được bật và thủy thủ hướng dẫn cách câu mực. Mực câu được chế biến ngay trên tàu. Về lại bến khoảng 21:00.",
+          "highlights": [
+            "Hoàng hôn trên biển",
+            "Tự tay câu mực",
+            "Mực tươi chế biến tại chỗ"
+          ],
+          "inclusions": [
+            "Xe đưa đón",
+            "Tàu, áo phao, cần câu",
+            "Bữa tối nhẹ trên tàu",
+            "Nước suối"
+          ],
+          "exclusions": [
+            "Đồ uống khác",
+            "Chi phí cá nhân"
+          ]
+        },
+        "en": {
+          "title": "Sunset Cruise and Night Squid Fishing",
+          "slug": "sunset-cruise-night-squid-fishing",
+          "summary": "Board at golden hour, watch the sunset at sea, fish for squid with local crew and taste your catch on board.",
+          "description": "The boat leaves around 17:00 for calm waters to watch the sunset. After dark the fishing lights go on and the crew shows you how to catch squid, which is cooked on board. Back at the pier around 21:00.",
+          "highlights": [
+            "Sunset at sea",
+            "Catch your own squid",
+            "Fresh squid cooked on board"
+          ],
+          "inclusions": [
+            "Transfers",
+            "Boat, life jackets, fishing gear",
+            "Light dinner on board",
+            "Drinking water"
+          ],
+          "exclusions": [
+            "Other drinks",
+            "Personal expenses"
+          ]
+        }
+      }
+    },
+    {
+      "key": "north-island-discovery",
+      "supplier": "demo-sup-ngoc-bien",
+      "kind": "tour",
+      "region": "Phú Quốc",
+      "location": {
+        "lat": 10.342,
+        "lng": 103.845
+      },
+      "meetingPoint": "Đón tại khách sạn khu Dương Đông, Ông Lang, Cửa Lấp",
+      "durationMinutes": 420,
+      "departureTimes": [
+        "08:30"
+      ],
+      "operatingDays": "daily",
+      "capacityPerDeparture": 25,
+      "minPax": 2,
+      "pricing": {
+        "currency": "VND",
+        "perPerson": {
+          "adult": 650000,
+          "child": 450000,
+          "infant": 0
+        },
+        "ageBands": {
+          "adult": "10+",
+          "child": "5-9",
+          "infant": "0-4"
+        }
+      },
+      "cancellationPolicy": {
+        "rules": [
+          {
+            "hoursBeforeStart": 24,
+            "refundPercent": 100
+          },
+          {
+            "hoursBeforeStart": 0,
+            "refundPercent": 0
+          }
+        ],
+        "weatherCancellationBySupplier": "full_refund_or_reschedule"
+      },
+      "translations": {
+        "vi": {
+          "title": "Khám phá Bắc đảo: Gành Dầu, rừng nguyên sinh và làng chài",
+          "slug": "kham-pha-bac-dao-ganh-dau",
+          "summary": "Hành trình bằng xe khám phá vùng Bắc đảo hoang sơ: Mũi Gành Dầu, rừng nguyên sinh, làng chài và bãi biển vắng.",
+          "description": "Xe đưa đoàn lên phía Bắc đảo, dừng tại Mũi Gành Dầu nhìn ra biển giáp ranh, đi bộ nhẹ trong rừng nguyên sinh, ghé làng chài để tìm hiểu nghề biển và tắm biển tại một bãi biển yên tĩnh. Ăn trưa tại nhà hàng địa phương.",
+          "highlights": [
+            "Mũi Gành Dầu",
+            "Đi bộ rừng nguyên sinh",
+            "Làng chài địa phương"
+          ],
+          "inclusions": [
+            "Xe đời mới có điều hòa",
+            "Bữa trưa",
+            "Hướng dẫn viên",
+            "Vé tham quan theo chương trình",
+            "Bảo hiểm"
+          ],
+          "exclusions": [
+            "Đồ uống",
+            "Chi phí cá nhân"
+          ]
+        },
+        "en": {
+          "title": "North Island Discovery: Ganh Dau Cape, Rainforest and Fishing Village",
+          "slug": "north-island-discovery-ganh-dau",
+          "summary": "A road trip through the wild north of the island: Ganh Dau Cape, primary rainforest, a fishing village and a quiet beach.",
+          "description": "Drive to the north of the island, stop at Ganh Dau Cape overlooking the border waters, take an easy rainforest walk, visit a fishing village to learn about local life and swim at a quiet beach. Lunch at a local restaurant.",
+          "highlights": [
+            "Ganh Dau Cape",
+            "Easy rainforest walk",
+            "Local fishing village"
+          ],
+          "inclusions": [
+            "Air-conditioned vehicle",
+            "Lunch",
+            "Guide",
+            "Entrance fees as listed",
+            "Insurance"
+          ],
+          "exclusions": [
+            "Drinks",
+            "Personal expenses"
+          ]
+        }
+      }
+    },
+    {
+      "key": "east-south-culture-tour",
+      "supplier": "demo-sup-ngoc-bien",
+      "kind": "tour",
+      "region": "Phú Quốc",
+      "location": {
+        "lat": 10.106,
+        "lng": 104.056
+      },
+      "meetingPoint": "Đón tại khách sạn khu trung tâm",
+      "durationMinutes": 480,
+      "departureTimes": [
+        "08:00"
+      ],
+      "operatingDays": "daily",
+      "capacityPerDeparture": 25,
+      "minPax": 2,
+      "pricing": {
+        "currency": "VND",
+        "perPerson": {
+          "adult": 550000,
+          "child": 400000,
+          "infant": 0
+        },
+        "ageBands": {
+          "adult": "10+",
+          "child": "5-9",
+          "infant": "0-4"
+        }
+      },
+      "cancellationPolicy": {
+        "rules": [
+          {
+            "hoursBeforeStart": 24,
+            "refundPercent": 100
+          },
+          {
+            "hoursBeforeStart": 0,
+            "refundPercent": 0
+          }
+        ],
+        "weatherCancellationBySupplier": "full_refund_or_reschedule"
+      },
+      "translations": {
+        "vi": {
+          "title": "Tour Đông – Nam đảo: Chùa Hộ Quốc, Bãi Sao, nhà thùng nước mắm",
+          "slug": "tour-dong-nam-dao-chua-ho-quoc-bai-sao",
+          "summary": "Một ngày tìm hiểu văn hóa và đặc sản Phú Quốc: Chùa Hộ Quốc, nhà thùng nước mắm, vườn tiêu, cơ sở nuôi cấy ngọc trai và Bãi Sao.",
+          "description": "Tham quan Chùa Hộ Quốc nhìn ra biển, nhà thùng ủ nước mắm truyền thống, vườn tiêu và cơ sở nuôi cấy ngọc trai. Buổi chiều nghỉ ngơi, tắm biển tại Bãi Sao với cát trắng mịn.",
+          "highlights": [
+            "Chùa Hộ Quốc bên biển",
+            "Nhà thùng nước mắm truyền thống",
+            "Bãi Sao cát trắng"
+          ],
+          "inclusions": [
+            "Xe đưa đón",
+            "Bữa trưa",
+            "Hướng dẫn viên",
+            "Bảo hiểm"
+          ],
+          "exclusions": [
+            "Mua sắm đặc sản",
+            "Chi phí cá nhân"
+          ]
+        },
+        "en": {
+          "title": "East & South Island Culture Tour: Ho Quoc Pagoda, Sao Beach, Fish Sauce House",
+          "slug": "east-south-island-culture-tour",
+          "summary": "A day of Phu Quoc culture and specialties: Ho Quoc Pagoda, a traditional fish sauce house, a pepper farm, a pearl farm and Sao Beach.",
+          "description": "Visit the seaside Ho Quoc Pagoda, a traditional fish sauce fermentation house, a pepper farm and a pearl farm. Spend the afternoon swimming and relaxing on the fine white sand of Sao Beach.",
+          "highlights": [
+            "Seaside Ho Quoc Pagoda",
+            "Traditional fish sauce house",
+            "White-sand Sao Beach"
+          ],
+          "inclusions": [
+            "Transfers",
+            "Lunch",
+            "Guide",
+            "Insurance"
+          ],
+          "exclusions": [
+            "Souvenir shopping",
+            "Personal expenses"
+          ]
+        }
+      }
+    },
+    {
+      "key": "intro-scuba-dive",
+      "supplier": "demo-sup-hoang-hon",
+      "kind": "activity",
+      "region": "Phú Quốc",
+      "location": {
+        "lat": 10.023,
+        "lng": 104.006
+      },
+      "meetingPoint": "Trung tâm lặn tại An Thới (có đón khách sạn)",
+      "durationMinutes": 420,
+      "departureTimes": [
+        "07:30"
+      ],
+      "operatingDays": "daily",
+      "capacityPerDeparture": 8,
+      "minPax": 1,
+      "pricing": {
+        "currency": "VND",
+        "perPerson": {
+          "adult": 1800000
+        },
+        "ageBands": {
+          "adult": "12+"
+        },
+        "note": "Not suitable for children under 12, pregnant guests or guests with certain medical conditions."
+      },
+      "cancellationPolicy": {
+        "rules": [
+          {
+            "hoursBeforeStart": 48,
+            "refundPercent": 100
+          },
+          {
+            "hoursBeforeStart": 24,
+            "refundPercent": 50
+          },
+          {
+            "hoursBeforeStart": 0,
+            "refundPercent": 0
+          }
+        ],
+        "weatherCancellationBySupplier": "full_refund_or_reschedule"
+      },
+      "translations": {
+        "vi": {
+          "title": "Lặn bình khí trải nghiệm cho người mới (2 lượt lặn)",
+          "slug": "lan-binh-khi-trai-nghiem-nguoi-moi",
+          "summary": "Lặn bình khí lần đầu cùng huấn luyện viên có chứng chỉ, 2 lượt lặn ở rạn san hô Nam đảo, không cần kinh nghiệm.",
+          "description": "Học an toàn và kỹ năng cơ bản trên tàu, sau đó lặn 2 lượt cùng huấn luyện viên theo tỉ lệ tối đa 1:2 tại rạn san hô cạn. Khách cần khai báo tình trạng sức khỏe trước khi lặn.",
+          "highlights": [
+            "Không cần kinh nghiệm",
+            "Huấn luyện viên có chứng chỉ",
+            "Nhóm nhỏ tối đa 8 khách"
+          ],
+          "inclusions": [
+            "Thiết bị lặn đầy đủ",
+            "Huấn luyện viên",
+            "Bữa trưa trên tàu",
+            "Xe đưa đón",
+            "Bảo hiểm"
+          ],
+          "exclusions": [
+            "Ảnh/video dưới nước",
+            "Chi phí cá nhân"
+          ]
+        },
+        "en": {
+          "title": "Discover Scuba Diving for Beginners (2 Dives)",
+          "slug": "discover-scuba-diving-beginners",
+          "summary": "Your first scuba dives with a certified instructor — two dives on the southern coral reefs, no experience needed.",
+          "description": "Safety briefing and basic skills on board, then two dives with an instructor at a maximum ratio of 1:2 over shallow reefs. A medical self-declaration is required before diving.",
+          "highlights": [
+            "No experience needed",
+            "Certified instructors",
+            "Small group, max 8 guests"
+          ],
+          "inclusions": [
+            "Full dive equipment",
+            "Instructor",
+            "Lunch on board",
+            "Transfers",
+            "Insurance"
+          ],
+          "exclusions": [
+            "Underwater photos/video",
+            "Personal expenses"
+          ]
+        }
+      }
+    },
+    {
+      "key": "mangrove-kayak-sup",
+      "supplier": "demo-sup-hoang-hon",
+      "kind": "activity",
+      "region": "Phú Quốc",
+      "location": {
+        "lat": 10.335,
+        "lng": 103.945
+      },
+      "meetingPoint": "Rạch Tràm, phía Bắc đảo (có đón khách sạn)",
+      "durationMinutes": 240,
+      "departureTimes": [
+        "07:00",
+        "14:30"
+      ],
+      "operatingDays": "daily",
+      "capacityPerDeparture": 16,
+      "minPax": 2,
+      "pricing": {
+        "currency": "VND",
+        "perPerson": {
+          "adult": 600000,
+          "child": 450000,
+          "infant": 0
+        },
+        "ageBands": {
+          "adult": "10+",
+          "child": "5-9",
+          "infant": "0-4"
+        }
+      },
+      "cancellationPolicy": {
+        "rules": [
+          {
+            "hoursBeforeStart": 24,
+            "refundPercent": 100
+          },
+          {
+            "hoursBeforeStart": 0,
+            "refundPercent": 0
+          }
+        ],
+        "weatherCancellationBySupplier": "full_refund_or_reschedule"
+      },
+      "translations": {
+        "vi": {
+          "title": "Chèo kayak và SUP rừng ngập mặn Rạch Tràm",
+          "slug": "cheo-kayak-sup-rung-ngap-man-rach-tram",
+          "summary": "Chèo kayak hoặc ván đứng SUP xuyên qua rừng ngập mặn yên tĩnh ở phía Bắc đảo, phù hợp người mới.",
+          "description": "Sau phần hướng dẫn an toàn, đoàn chèo kayak hoặc SUP theo luồng nước giữa rừng ngập mặn, quan sát chim và hệ sinh thái ven biển, kết thúc tại làng chài nhỏ. Có ca sáng sớm và ca chiều.",
+          "highlights": [
+            "Rừng ngập mặn hoang sơ",
+            "Phù hợp người mới",
+            "Hai ca sáng và chiều"
+          ],
+          "inclusions": [
+            "Kayak hoặc SUP, áo phao",
+            "Hướng dẫn viên",
+            "Nước và trái cây",
+            "Xe đưa đón"
+          ],
+          "exclusions": [
+            "Chi phí cá nhân"
+          ]
+        },
+        "en": {
+          "title": "Rach Tram Mangrove Kayak & Stand-up Paddle",
+          "slug": "rach-tram-mangrove-kayak-sup",
+          "summary": "Paddle a kayak or SUP board through quiet mangrove channels in the north of the island — beginner friendly.",
+          "description": "After a safety briefing, paddle along the channels of the mangrove forest, watch birds and coastal wildlife and finish at a small fishing village. Early-morning and afternoon sessions.",
+          "highlights": [
+            "Unspoiled mangrove forest",
+            "Beginner friendly",
+            "Morning and afternoon sessions"
+          ],
+          "inclusions": [
+            "Kayak or SUP, life jacket",
+            "Guide",
+            "Water and fruit",
+            "Transfers"
+          ],
+          "exclusions": [
+            "Personal expenses"
+          ]
+        }
+      }
+    },
+    {
+      "key": "phu-quoc-cooking-class",
+      "supplier": "demo-sup-ngoc-bien",
+      "kind": "activity",
+      "region": "Phú Quốc",
+      "location": {
+        "lat": 10.2165,
+        "lng": 103.959
+      },
+      "meetingPoint": "Chợ Dương Đông",
+      "durationMinutes": 210,
+      "departureTimes": [
+        "09:00",
+        "15:00"
+      ],
+      "operatingDays": "daily",
+      "capacityPerDeparture": 12,
+      "minPax": 2,
+      "pricing": {
+        "currency": "VND",
+        "perPerson": {
+          "adult": 750000,
+          "child": 500000,
+          "infant": 0
+        },
+        "ageBands": {
+          "adult": "10+",
+          "child": "5-9",
+          "infant": "0-4"
+        }
+      },
+      "cancellationPolicy": {
+        "rules": [
+          {
+            "hoursBeforeStart": 24,
+            "refundPercent": 100
+          },
+          {
+            "hoursBeforeStart": 0,
+            "refundPercent": 0
+          }
+        ],
+        "weatherCancellationBySupplier": "full_refund_or_reschedule"
+      },
+      "translations": {
+        "vi": {
+          "title": "Lớp học nấu món Phú Quốc: đi chợ và nấu hải sản",
+          "slug": "lop-hoc-nau-mon-phu-quoc",
+          "summary": "Đi chợ Dương Đông chọn nguyên liệu, sau đó tự nấu 3 món đặc trưng Phú Quốc và thưởng thức cùng đầu bếp.",
+          "description": "Đầu bếp dẫn đoàn đi chợ, giới thiệu hải sản và gia vị địa phương như tiêu và nước mắm Phú Quốc. Tại bếp, mỗi khách tự tay nấu 3 món, có thể thay thế cho người ăn chay hoặc dị ứng hải sản khi đặt trước.",
+          "highlights": [
+            "Đi chợ cùng đầu bếp",
+            "Tự nấu 3 món",
+            "Có lựa chọn chay"
+          ],
+          "inclusions": [
+            "Nguyên liệu",
+            "Đầu bếp hướng dẫn",
+            "Bữa ăn",
+            "Công thức mang về"
+          ],
+          "exclusions": [
+            "Đưa đón",
+            "Đồ uống có cồn"
+          ]
+        },
+        "en": {
+          "title": "Phu Quoc Cooking Class: Market Tour and Seafood Cooking",
+          "slug": "phu-quoc-cooking-class-market-seafood",
+          "summary": "Shop at Duong Dong market, then cook three signature Phu Quoc dishes and eat them with the chef.",
+          "description": "The chef guides you through the market and introduces local seafood and seasonings such as Phu Quoc pepper and fish sauce. In the kitchen each guest cooks three dishes; vegetarian or seafood-allergy alternatives are available on request at booking.",
+          "highlights": [
+            "Market tour with the chef",
+            "Cook three dishes yourself",
+            "Vegetarian option"
+          ],
+          "inclusions": [
+            "Ingredients",
+            "Chef instructor",
+            "Meal",
+            "Recipes to take home"
+          ],
+          "exclusions": [
+            "Transfers",
+            "Alcoholic drinks"
+          ]
+        }
+      }
+    },
+    {
+      "key": "airport-transfer-private",
+      "supplier": "demo-sup-dao-ngoc-transfer",
+      "kind": "transfer",
+      "region": "Phú Quốc",
+      "location": {
+        "lat": 10.1698,
+        "lng": 103.9931
+      },
+      "meetingPoint": "Sảnh đến, Sân bay quốc tế Phú Quốc (PQC)",
+      "durationMinutes": 30,
+      "departureTimes": [
+        "on_request"
+      ],
+      "operatingDays": "daily",
+      "capacityPerDeparture": 20,
+      "minPax": 1,
+      "pricing": {
+        "currency": "VND",
+        "perVehicle": {
+          "sedan_4_seats": 250000,
+          "suv_7_seats": 350000,
+          "van_16_seats": 600000
+        },
+        "note": "Zone 1: Duong Dong, Ong Lang, Bai Truong. Other zones priced separately."
+      },
+      "cancellationPolicy": {
+        "rules": [
+          {
+            "hoursBeforeStart": 12,
+            "refundPercent": 100
+          },
+          {
+            "hoursBeforeStart": 0,
+            "refundPercent": 0
+          }
+        ],
+        "flightDelayPolicy": "free_wait_60_minutes_after_actual_arrival"
+      },
+      "translations": {
+        "vi": {
+          "title": "Xe riêng đưa đón sân bay Phú Quốc",
+          "slug": "xe-rieng-dua-don-san-bay-phu-quoc",
+          "summary": "Xe riêng đón tại sân bay Phú Quốc về khách sạn khu Dương Đông, Ông Lang, Bãi Trường; tài xế cầm bảng tên chờ sẵn.",
+          "description": "Tài xế theo dõi số hiệu chuyến bay và chờ tại sảnh đến với bảng tên. Miễn phí chờ 60 phút sau giờ hạ cánh thực tế. Chọn loại xe theo số khách và hành lý.",
+          "highlights": [
+            "Theo dõi chuyến bay",
+            "Miễn phí chờ 60 phút",
+            "Giá trọn gói theo xe"
+          ],
+          "inclusions": [
+            "Xe riêng có điều hòa",
+            "Tài xế",
+            "Phí cầu đường, bến bãi"
+          ],
+          "exclusions": [
+            "Điểm đón ngoài vùng 1"
+          ]
+        },
+        "en": {
+          "title": "Private Phu Quoc Airport Transfer",
+          "slug": "private-phu-quoc-airport-transfer",
+          "summary": "Private car from Phu Quoc airport to hotels in Duong Dong, Ong Lang and Bai Truong, with a driver waiting with a name sign.",
+          "description": "The driver tracks your flight and waits in the arrivals hall with a name sign. Free waiting for 60 minutes after actual landing. Choose a vehicle by party size and luggage.",
+          "highlights": [
+            "Flight tracking",
+            "60 minutes free waiting",
+            "Fixed price per vehicle"
+          ],
+          "inclusions": [
+            "Private air-conditioned car",
+            "Driver",
+            "Tolls and parking"
+          ],
+          "exclusions": [
+            "Hotels outside zone 1"
+          ]
+        }
+      }
+    }
+  ]
+}
