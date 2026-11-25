@@ -13,3 +13,5 @@
 - P1-04 reviewed: ACCEPTED WITH LIMITATIONS (rounding/allocation verified, ESLint float ban mutation-verified; E1 FX rate<=0 accepted, E2 FX snapshot defaults, E3 tz validation → P1-05). Added TASK-P1-05 spec.
 - P1-05 re-reviewed at ab8a554: ACCEPTED (upsert, idempotency, atomicity, ISO N.A. verified). D-014 decided: no GitHub Pro for now, revisit before Phase 2. Added TASK-P1-07 spec; P1-06 waits for D-007.
 - P1-07 PR #9 reviewed: REJECTED (concurrency test never overlaps — mutation survived; 5xx detail leak; app-clock expiry; tests wipe shared DB). D-007 decided: Better Auth. Added TASK-P1-06 spec.
+- P1-07 re-reviewed at 0855621: ACCEPTED WITH LIMITATIONS (G1 mutation now killed; H1 same-payload fencing test → P1-06). Antigravity earlier reported a non-existent commit (c3f9a2e…); actual push was 0855621. GitHub Actions blocked by billing since 2026-11-24.
+- D-015 decided: repository public (experimental phase); history scanned clean of secrets.

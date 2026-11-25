@@ -15,8 +15,10 @@ Task status:
 | P1-04 Money, FX, time | DONE — merged (PR #5); E1–E3 fixed in P1-05 |
 | P1-05 Reference data | DONE — merged (PR #7) |
 | P1-06 Identity | READY — spec in implementation/tasks (start after P1-07 merged) |
-| P1-07 Idempotency-Key | REJECTED — corrections G1–G6 requested (PR #9) |
+| P1-07 Idempotency-Key | ACCEPTED WITH LIMITATIONS (H1 → P1-06) — verified locally; GitHub CI blocked by billing; awaiting Owner merge of PR #9 |
 
 No application code exists yet.
 
 Note: GitHub branch protection / rulesets are NOT available for private repos on the free plan (API returned 403 "Upgrade to GitHub Pro"). Owner decided D-014 = no upgrade for now; merges rely on the rule "only PRs Claude marked ACCEPTED, with green CI".
+
+Note (2026-11-25): GitHub Actions refuses to start jobs — "recent account payments have failed or spending limit needs to be increased". Owner to check Billing. Until fixed, Claude verifies locally and records it in each review.
