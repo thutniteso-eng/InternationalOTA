@@ -35,13 +35,21 @@ export function canonicalizeJson(value: unknown): string {
 
 /**
  * Computes the scope identifier for an incoming HTTP request:
- * METHOD + ' ' + route pattern (e.g. 'POST /bookings').
+ * - Authenticated requests (principal present): `<userId>:<METHOD> <routePattern>`
+ * - Anonymous requests: `<METHOD> <routePattern>` (e.g. 'POST /bookings').
  */
 export function computeScope(req: Request): string {
   const method = req.method.toUpperCase();
   const route = req.route as { path?: string } | undefined;
   const routePattern = (req.baseUrl || '') + (route?.path || req.path);
-  return `${method} ${routePattern}`;
+  const baseScope = `${method} ${routePattern}`;
+
+  const principal = (req as Request & { principal?: { userId?: string } }).principal;
+  if (principal?.userId) {
+    return `${principal.userId}:${baseScope}`;
+  }
+
+  return baseScope;
 }
 
 /**

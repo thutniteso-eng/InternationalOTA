@@ -28,6 +28,19 @@ module.exports = {
         pathNot: ['^apps/api/src/modules/$1/', '^apps/api/src/modules/([^/]+)/index\\.(ts|js)$'],
       },
     },
+    {
+      name: 'no-better-auth-outside-identity',
+      comment:
+        'Only apps/api/src/modules/identity/ may import better-auth (D-007). All other modules must use our own identity module public API.',
+      severity: 'error',
+      from: {
+        path: '^apps/api/src/',
+        pathNot: '^apps/api/src/modules/identity/',
+      },
+      to: {
+        path: 'better-auth',
+      },
+    },
   ],
   options: {
     doNotFollow: {

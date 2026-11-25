@@ -26,6 +26,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "pnpm build && node dist/migrate.js",
     "db:seed": "pnpm build && node dist/seed.js",
+    "identity:grant-role": "pnpm build && node dist/grant-role.js",
     "generate:reference-data": "node --experimental-strip-types scripts/generate-reference-data.ts"
   },
   "dependencies": {
