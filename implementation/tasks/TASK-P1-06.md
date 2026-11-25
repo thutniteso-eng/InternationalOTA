@@ -39,3 +39,6 @@ Social login, 2FA/passkeys (plugins later), partner organizations (Phase 4), fro
 
 ## DELIVERABLES
 Branch `task/P1-06-identity`, PR `[P1-06] Identity & access`, report `reports/TASK-P1-06-report.md` including the pinned better-auth version and how the body-parser issue was handled.
+
+## ADDITIONAL ITEM (carried from P1-07 review, H1)
+In `apps/api/src/modules/idempotency/idempotency.spec.ts` add a fencing test where the takeover execution uses the **same** payload: execution #1 (gated) → expire its lock → execution #2 with the same key and same body takes over and is itself held in progress → release #1 → assert the row is still `in_progress` (not overwritten with #1's response) → release #2 → row stores #2's response. Prove it fails when the `locked_until` token condition is removed from the completion `WHERE` (paste output).
