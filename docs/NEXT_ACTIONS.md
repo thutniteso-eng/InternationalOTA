@@ -3,8 +3,8 @@
 ## Owner
 1. ~~Create GitHub repo~~ done. Clone repo in WSL, give TASK-P1-01 to Antigravity.
 2. Book lawyer/accountant (licences, e-commerce registration, invoicing, personal data, merchant model D-004).
-3. Contact 1–2 payment gateways with international cards; request sandbox.
-4. List 5–10 Phu Quoc tours/activities for pilot (price, capacity, cancellation policy).
+3. ~~Payment gateway sandbox~~ not needed now (D-020: Mock gateway locally; real gateway after legal entity).
+4. ~~Pilot tour list~~ demo set in `implementation/demo-data/` (PR #25); real data later.
 
 ## Claude
 1. HAIP deep audit (tests, licence/vuln scans, last-room concurrency drill).
