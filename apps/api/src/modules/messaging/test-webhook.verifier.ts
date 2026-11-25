@@ -23,12 +23,18 @@ export class TestHmacWebhookVerifier implements WebhookVerifier {
   verify(rawBody: Buffer, headers: IncomingHttpHeaders): WebhookVerificationResult {
     const secret = process.env['WEBHOOK_TEST_SECRET'];
     if (!secret) {
-      throw new UnauthorizedException('Webhook verification secret is not configured');
+      throw new UnauthorizedException({
+        message: 'Webhook verification secret is not configured',
+        i18nKey: 'http.401.invalidWebhookSignature',
+      });
     }
 
     const rawSignature = headers['x-webhook-signature'];
     if (typeof rawSignature !== 'string' || rawSignature.length === 0) {
-      throw new UnauthorizedException('Missing webhook signature');
+      throw new UnauthorizedException({
+        message: 'Missing webhook signature',
+        i18nKey: 'http.401.missingWebhookSignature',
+      });
     }
 
     const providedHex = rawSignature.startsWith('sha256=')
@@ -36,25 +42,37 @@ export class TestHmacWebhookVerifier implements WebhookVerifier {
       : rawSignature;
 
     if (!/^[0-9a-fA-F]{64}$/.test(providedHex)) {
-      throw new UnauthorizedException('Invalid webhook signature format');
+      throw new UnauthorizedException({
+        message: 'Invalid webhook signature format',
+        i18nKey: 'http.401.invalidWebhookSignature',
+      });
     }
 
     const expectedBuf = createHmac('sha256', secret).update(rawBody).digest();
     const providedBuf = Buffer.from(providedHex, 'hex');
 
     if (expectedBuf.length !== providedBuf.length || !timingSafeEqual(expectedBuf, providedBuf)) {
-      throw new UnauthorizedException('Invalid webhook signature');
+      throw new UnauthorizedException({
+        message: 'Invalid webhook signature',
+        i18nKey: 'http.401.invalidWebhookSignature',
+      });
     }
 
     let parsed: unknown;
     try {
       parsed = JSON.parse(rawBody.toString('utf8'));
     } catch {
-      throw new UnauthorizedException('Invalid webhook JSON payload');
+      throw new UnauthorizedException({
+        message: 'Invalid webhook JSON payload',
+        i18nKey: 'http.401.invalidWebhookPayload',
+      });
     }
 
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      throw new UnauthorizedException('Webhook payload must be a JSON object');
+      throw new UnauthorizedException({
+        message: 'Webhook payload must be a JSON object',
+        i18nKey: 'http.401.invalidWebhookPayload',
+      });
     }
 
     const payload = parsed as Record<string, unknown>;
@@ -62,7 +80,10 @@ export class TestHmacWebhookVerifier implements WebhookVerifier {
     const eventId = typeof bodyEventId === 'string' && bodyEventId.length > 0 ? bodyEventId : null;
 
     if (!eventId) {
-      throw new UnauthorizedException('Signed webhook body must contain a non-empty string "id"');
+      throw new UnauthorizedException({
+        message: 'Signed webhook body must contain a non-empty string "id"',
+        i18nKey: 'http.401.invalidWebhookPayload',
+      });
     }
 
     return { eventId, payload };

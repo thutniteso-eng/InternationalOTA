@@ -32,8 +32,15 @@ function getCompiledMessage(locale: string, key: string, template: string): Intl
   return compiled;
 }
 
-function isProductionEnv(): boolean {
-  return typeof process !== 'undefined' && process.env['NODE_ENV'] === 'production';
+function isNonFatalMissingKeyEnv(): boolean {
+  if (typeof process === 'undefined') {
+    return false;
+  }
+  const appEnv = process.env['APP_ENV']?.trim().toLowerCase();
+  if (appEnv === 'staging' || appEnv === 'production') {
+    return true;
+  }
+  return process.env['NODE_ENV'] === 'production';
 }
 
 function emitMissingKeyWarning(locale: string, key: string): void {
@@ -64,7 +71,7 @@ export function t(
   const template = catalog?.[key];
 
   if (template === undefined) {
-    if (isProductionEnv()) {
+    if (isNonFatalMissingKeyEnv()) {
       emitMissingKeyWarning(locale, key);
       return key;
     }

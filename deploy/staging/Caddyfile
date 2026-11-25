@@ -1,0 +1,49 @@
+:80 {
+	# Health probes remain reachable without Basic Auth for tunnel/monitoring verification
+	handle /api/health* {
+		uri strip_prefix /api
+		reverse_proxy api:4000 {
+			header_up X-Proxy-Secret {$PROXY_SHARED_SECRET}
+			header_up X-Forwarded-Proto https
+		}
+	}
+
+	# Incoming webhooks authenticate via provider cryptographic signatures, not Basic Auth
+	handle /webhooks/* {
+		reverse_proxy api:4000 {
+			header_up X-Proxy-Secret {$PROXY_SHARED_SECRET}
+			header_up X-Forwarded-Proto https
+		}
+	}
+
+	# All remaining staging web and API traffic requires Basic Auth at the proxy edge
+	handle {
+		basic_auth {
+			{$STAGING_BASIC_AUTH_USER} {$STAGING_BASIC_AUTH_HASH}
+		}
+
+		handle /api/auth* {
+			reverse_proxy api:4000 {
+				header_up -Authorization
+				header_up X-Proxy-Secret {$PROXY_SHARED_SECRET}
+				header_up X-Forwarded-Proto https
+			}
+		}
+
+		handle /api/* {
+			uri strip_prefix /api
+			reverse_proxy api:4000 {
+				header_up -Authorization
+				header_up X-Proxy-Secret {$PROXY_SHARED_SECRET}
+				header_up X-Forwarded-Proto https
+			}
+		}
+
+		handle {
+			reverse_proxy web:3000 {
+				header_up -Authorization
+				header_up X-Forwarded-Proto https
+			}
+		}
+	}
+}

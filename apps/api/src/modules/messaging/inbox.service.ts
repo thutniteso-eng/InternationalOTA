@@ -16,6 +16,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { resolveAppEnv } from '@internationalota/shared';
 import { DRIZZLE_DB } from '../../database/database.module.js';
 import {
   calculateExponentialBackoffMs,
@@ -46,7 +47,12 @@ export class InboxService {
   private shuttingDown = false;
 
   constructor(@Inject(DRIZZLE_DB) private readonly db: DatabaseClient) {
-    if (process.env['NODE_ENV'] !== 'production') {
+    const appEnv = resolveAppEnv();
+    if (
+      process.env['NODE_ENV'] !== 'production' &&
+      appEnv !== 'staging' &&
+      appEnv !== 'production'
+    ) {
       this.registerVerifier(new TestHmacWebhookVerifier());
     }
   }
@@ -89,7 +95,11 @@ export class InboxService {
   ): Promise<{ accepted: true; duplicate: boolean; eventId: string }> {
     const verifier = this.verifiers.get(provider);
     if (!verifier) {
-      throw new NotFoundException(`Unknown webhook provider: ${provider}`);
+      throw new NotFoundException({
+        message: `Unknown webhook provider: ${provider}`,
+        i18nKey: 'http.404.unknownWebhookProvider',
+        i18nParams: { provider },
+      });
     }
 
     let verified: { eventId: string; payload: Record<string, unknown> };
@@ -99,7 +109,10 @@ export class InboxService {
       if (err instanceof UnauthorizedException) {
         throw err;
       }
-      throw new UnauthorizedException('Invalid webhook signature');
+      throw new UnauthorizedException({
+        message: 'Invalid webhook signature',
+        i18nKey: 'http.401.invalidWebhookSignature',
+      });
     }
 
     const inserted = await this.db

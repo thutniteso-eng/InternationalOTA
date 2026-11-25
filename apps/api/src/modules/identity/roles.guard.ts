@@ -30,12 +30,18 @@ export class RolesGuard implements CanActivate {
     const principal = req.principal;
 
     if (!principal) {
-      throw new ForbiddenException('Insufficient role permissions');
+      throw new ForbiddenException({
+        message: 'Insufficient role permissions',
+        i18nKey: 'http.403.insufficientRole',
+      });
     }
 
     const hasRole = requiredRoles.some((role) => principal.roles.includes(role));
     if (!hasRole) {
-      throw new ForbiddenException('Insufficient role permissions');
+      throw new ForbiddenException({
+        message: 'Insufficient role permissions',
+        i18nKey: 'http.403.insufficientRole',
+      });
     }
 
     return true;

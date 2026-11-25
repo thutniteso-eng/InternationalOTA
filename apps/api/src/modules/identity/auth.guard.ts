@@ -20,7 +20,10 @@ export class AuthGuard implements CanActivate {
     const principal = await this.identityService.resolvePrincipal(req.headers);
 
     if (!principal) {
-      throw new UnauthorizedException('Authentication required');
+      throw new UnauthorizedException({
+        message: 'Authentication required',
+        i18nKey: 'http.401.authRequired',
+      });
     }
 
     req.principal = principal;

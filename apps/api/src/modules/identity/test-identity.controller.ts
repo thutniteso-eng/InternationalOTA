@@ -33,7 +33,10 @@ export class TestIdentityController {
     @CurrentPrincipal() principal: Principal,
   ): { userId: string; secret: string } {
     if (principal.userId !== id) {
-      throw new ForbiddenException('Cannot access another user resource');
+      throw new ForbiddenException({
+        message: 'Cannot access another user resource',
+        i18nKey: 'http.403.crossAccountForbidden',
+      });
     }
     return { userId: id, secret: `private-data-for-${id}` };
   }

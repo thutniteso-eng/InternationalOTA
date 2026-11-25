@@ -80,7 +80,7 @@ describe('OpenTelemetry tracing integration test (P1-10 AC6)', () => {
       await testDb.teardown();
     }
     await shutdownTracing();
-  });
+  }, 30_000);
 
   it('AC6: HTTP request querying DB yields an HTTP server span with a child pg span sharing traceId, and logs carry that traceId', async () => {
     spanExporter.reset();

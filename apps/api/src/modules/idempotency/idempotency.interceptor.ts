@@ -71,9 +71,11 @@ export class IdempotencyInterceptor implements NestInterceptor {
     // 1. Validate Idempotency-Key header: 1-255 printable ASCII characters without spaces
     const rawKey = req.headers['idempotency-key'];
     if (!isValidIdempotencyKey(rawKey)) {
-      throw new BadRequestException(
-        'Idempotency-Key header is required and must be 1-255 printable ASCII characters without spaces',
-      );
+      throw new BadRequestException({
+        message:
+          'Idempotency-Key header is required and must be 1-255 printable ASCII characters without spaces',
+        i18nKey: 'http.400.invalidIdempotencyKey',
+      });
     }
     const key = rawKey;
 
@@ -105,14 +107,18 @@ export class IdempotencyInterceptor implements NestInterceptor {
       const decision = await this.resolveConflict(scope, key, requestHash);
 
       if (decision.action === 'error_422') {
-        throw new UnprocessableEntityException(
-          'Idempotency key was previously used with a different request payload',
-        );
+        throw new UnprocessableEntityException({
+          message: 'Idempotency key was previously used with a different request payload',
+          i18nKey: 'http.422.idempotencyKeyReuse',
+        });
       }
 
       if (decision.action === 'error_409') {
         res.setHeader('Retry-After', '1');
-        throw new ConflictException('A request with this idempotency key is currently in progress');
+        throw new ConflictException({
+          message: 'A request with this idempotency key is currently in progress',
+          i18nKey: 'http.409.idempotencyInProgress',
+        });
       }
 
       if (decision.action === 'replay') {

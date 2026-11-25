@@ -10,6 +10,11 @@ import { HttpStatus, type INestApplication } from '@nestjs/common';
 import type { Express, NextFunction, Request, Response } from 'express';
 import type { Logger } from 'pino';
 import { pinoHttp } from 'pino-http';
+import {
+  isTrustedProxyIp,
+  parseTrustedProxyConfig,
+  resolveClientIp,
+} from './common/http/client-ip.js';
 import { LocaleService } from './common/i18n/locale.service.js';
 import {
   createPinoLogger,
@@ -84,6 +89,9 @@ export function configureApp(app: INestApplication, options: ConfigureAppOptions
   const httpAdapter = app.getHttpAdapter();
   const expressApp = httpAdapter.getInstance() as Express;
   const identityService = app.get(IdentityService);
+  const trustedProxyConfig = parseTrustedProxyConfig();
+  expressApp.set('trust proxy', (ip: string) => isTrustedProxyIp(ip, trustedProxyConfig));
+
   let localeService: LocaleService | undefined;
   try {
     localeService = app.get(LocaleService, { strict: false });
@@ -108,8 +116,14 @@ export function configureApp(app: INestApplication, options: ConfigureAppOptions
     },
   });
 
-  // 0. Request ID validation/generation, locale resolution, AsyncLocalStorage propagation, and HTTP request logging
+  // 0. Client IP resolution (L1), Request ID validation/generation, locale resolution, AsyncLocalStorage propagation, and HTTP request logging
   expressApp.use((req: Request, res: Response, next: NextFunction) => {
+    delete req.headers['x-resolved-client-ip'];
+    const clientIp = resolveClientIp(req, trustedProxyConfig);
+    if (clientIp) {
+      req.headers['x-resolved-client-ip'] = clientIp;
+    }
+
     const requestId = resolveRequestId(req.headers['x-request-id']);
     const locale = localeService
       ? localeService.resolveLocale(req.query?.['lang'], req.headers['accept-language'])
@@ -117,6 +131,9 @@ export function configureApp(app: INestApplication, options: ConfigureAppOptions
 
     (req as Request & { requestId?: string; locale?: string }).requestId = requestId;
     (req as Request & { requestId?: string; locale?: string }).locale = locale;
+    if (clientIp) {
+      (req as Request & { clientIp?: string }).clientIp = clientIp;
+    }
     res.setHeader('X-Request-Id', requestId);
     res.setHeader('Content-Language', locale);
 

@@ -10,7 +10,8 @@ import {
   identityVerifications,
   isValidIdentityRole,
 } from '@internationalota/db';
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import { resolveAppEnv } from '@internationalota/shared';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { fromNodeHeaders, toNodeHandler } from 'better-auth/node';
@@ -31,15 +32,35 @@ function parseTrustedOrigins(raw: string | undefined): string[] {
     .filter((origin) => origin.length > 0);
 }
 
+function parsePublicBaseUrl(raw: string | undefined): URL | undefined {
+  if (!raw || raw.trim().length === 0) {
+    return undefined;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(raw.trim());
+  } catch {
+    throw new Error(`Invalid PUBLIC_BASE_URL / BETTER_AUTH_URL: "${raw}"`);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(
+      `PUBLIC_BASE_URL (or BETTER_AUTH_URL) must use http or https scheme, got "${parsed.protocol}".`,
+    );
+  }
+  return parsed;
+}
+
 function createAuthInstance(params: {
   db: DatabaseClient;
   secret: string;
+  baseURL?: string;
   trustedOrigins: string[];
-  isProduction: boolean;
+  useSecureCookies: boolean;
   emailSender: EmailSender;
 }) {
   return betterAuth({
     secret: params.secret,
+    ...(params.baseURL ? { baseURL: params.baseURL } : {}),
     basePath: '/api/auth',
     trustedOrigins: params.trustedOrigins,
     database: drizzleAdapter(params.db, {
@@ -80,11 +101,16 @@ function createAuthInstance(params: {
       },
     },
     advanced: {
-      useSecureCookies: params.isProduction,
+      useSecureCookies: params.useSecureCookies,
       defaultCookieAttributes: {
         httpOnly: true,
         sameSite: 'lax',
-        secure: params.isProduction,
+        secure: params.useSecureCookies,
+      },
+      // Read client IP exclusively from our internal trusted-proxy middleware header (L1),
+      // never blindly from client-spoofable X-Forwarded-For or CF-Connecting-IP headers.
+      ipAddress: {
+        ipAddressHeaders: ['x-resolved-client-ip'],
       },
     },
     databaseHooks: {
@@ -113,6 +139,7 @@ function createAuthInstance(params: {
  */
 @Injectable()
 export class IdentityService {
+  private readonly logger = new Logger(IdentityService.name);
   private readonly auth: ReturnType<typeof createAuthInstance>;
   private readonly nodeHandler: ReturnType<typeof toNodeHandler>;
 
@@ -120,8 +147,7 @@ export class IdentityService {
     @Inject(DRIZZLE_DB) private readonly db: DatabaseClient,
     @Optional() @Inject(EMAIL_SENDER) private readonly emailSender?: EmailSender,
   ) {
-    const nodeEnv = process.env['NODE_ENV'] ?? 'development';
-    const isProduction = nodeEnv === 'production';
+    const appEnv = resolveAppEnv();
 
     const secret = process.env['BETTER_AUTH_SECRET'];
     if (!secret || secret.length < MIN_SECRET_LENGTH) {
@@ -130,20 +156,52 @@ export class IdentityService {
       );
     }
 
-    if (isProduction && (!this.emailSender || this.emailSender instanceof LogOnlyEmailSender)) {
+    const usingLogOnlySender = !this.emailSender || this.emailSender instanceof LogOnlyEmailSender;
+    if (appEnv === 'production' && usingLogOnlySender) {
       throw new Error(
-        'Refusing to start in production (NODE_ENV=production) without a real EmailSender configured.',
+        'Refusing to start in production (APP_ENV=production) without a real EmailSender configured.',
+      );
+    }
+    if (appEnv === 'staging' && usingLogOnlySender) {
+      this.logger.warn(
+        JSON.stringify({
+          level: 'warn',
+          event: 'staging_log_only_email_sender',
+          appEnv,
+          message:
+            'Starting in APP_ENV=staging with LogOnlyEmailSender; emails will be logged only and not delivered.',
+        }),
       );
     }
 
-    const activeSender: EmailSender = this.emailSender ?? new LogOnlyEmailSender();
+    const publicBaseUrl = parsePublicBaseUrl(
+      process.env['PUBLIC_BASE_URL'] ?? process.env['BETTER_AUTH_URL'],
+    );
     const trustedOrigins = parseTrustedOrigins(process.env['AUTH_TRUSTED_ORIGINS']);
+
+    // L2: outside local/test, fail fast without an explicit public base URL and non-empty AUTH_TRUSTED_ORIGINS
+    if (appEnv !== 'local' && appEnv !== 'test') {
+      if (!publicBaseUrl) {
+        throw new Error(
+          `PUBLIC_BASE_URL (or BETTER_AUTH_URL) must be explicitly configured when APP_ENV=${appEnv}.`,
+        );
+      }
+      if (trustedOrigins.length === 0) {
+        throw new Error(`AUTH_TRUSTED_ORIGINS must be non-empty when APP_ENV=${appEnv}.`);
+      }
+    }
+
+    // L3: derive Secure cookie flag from public base URL scheme (https -> Secure), never from NODE_ENV
+    const useSecureCookies = publicBaseUrl?.protocol === 'https:';
+
+    const activeSender: EmailSender = this.emailSender ?? new LogOnlyEmailSender();
 
     this.auth = createAuthInstance({
       db: this.db,
       secret,
+      ...(publicBaseUrl ? { baseURL: publicBaseUrl.origin } : {}),
       trustedOrigins,
-      isProduction,
+      useSecureCookies,
       emailSender: activeSender,
     });
 

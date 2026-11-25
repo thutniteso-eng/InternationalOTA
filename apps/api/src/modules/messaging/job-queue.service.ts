@@ -1,4 +1,5 @@
 import { type DatabaseClient, idempotencyKeys, lt, sql } from '@internationalota/db';
+import { resolveAppEnv } from '@internationalota/shared';
 import {
   Inject,
   Injectable,
@@ -41,9 +42,15 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
       throw new Error('DATABASE_URL is required to start pg-boss JobQueueService.');
     }
 
+    const appEnv = resolveAppEnv();
+    const shouldMigrateSchema =
+      process.env['PG_BOSS_MIGRATE'] !== 'false' && (appEnv === 'local' || appEnv === 'test');
+
     const boss = new PgBoss({
       connectionString,
-      supervise: process.env['NODE_ENV'] !== 'test',
+      migrate: shouldMigrateSchema,
+      createSchema: shouldMigrateSchema,
+      supervise: process.env['NODE_ENV'] !== 'test' && shouldMigrateSchema,
       schedule: true,
     });
 

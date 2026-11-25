@@ -1,0 +1,137 @@
+name: internationalota-staging
+
+services:
+  postgres:
+    image: postgis/postgis:17-3.5
+    restart: unless-stopped
+    env_file:
+      - .env.staging
+    volumes:
+      - staging_postgres_data:/var/lib/postgresql/data
+      - ./postgres-init.sh:/docker-entrypoint-initdb.d/01-postgres-init.sh:ro
+    networks:
+      - app_net
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${STAGING_DB_NAME}"']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: deploy/staging/Dockerfile.api
+    restart: 'no'
+    env_file:
+      - .env.staging
+    environment:
+      NODE_ENV: production
+      APP_ENV: staging
+      ALLOW_PROD_MIGRATE: '1'
+    command: ['node', 'apps/api/dist/scripts/staging-migrate.js']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app_net
+
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/staging/Dockerfile.api
+    restart: unless-stopped
+    env_file:
+      - .env.staging
+    environment:
+      NODE_ENV: production
+      APP_ENV: staging
+      API_PORT: '4000'
+      PG_BOSS_MIGRATE: 'false'
+      TRUSTED_PROXY_CIDRS: '172.29.10.10/32'
+      DEFAULT_LOCALE: vi
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - app_net
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/staging/Dockerfile.web
+    restart: unless-stopped
+    env_file:
+      - .env.staging
+    environment:
+      NODE_ENV: production
+      APP_ENV: staging
+      DEFAULT_LOCALE: vi
+      PORT: '3000'
+      HOSTNAME: '0.0.0.0'
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - app_net
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/vi').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  caddy:
+    image: caddy:2.11.9-alpine
+    restart: unless-stopped
+    env_file:
+      - .env.staging
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    networks:
+      tunnel_net:
+      app_net:
+        ipv4_address: 172.29.10.10
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.11.2
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --url http://caddy:80
+    networks:
+      - tunnel_net
+
+networks:
+  tunnel_net:
+    driver: bridge
+  app_net:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.29.10.0/24
+
+volumes:
+  staging_postgres_data:
