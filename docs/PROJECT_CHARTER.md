@@ -4,6 +4,7 @@
 An independently owned, internationally scalable OTA. Long-term scope comparable to Trip.com / iVIVU (hotels, tours, activities, transfers, flights, packages, partner portals, web + mobile).
 
 ## Ownership requirements
+(Note 2026-11-25, D-015: the repository is public during the experimental phase; ownership of code and data is unchanged — public visibility grants no licence to reuse.)
 Owner controls source code, data, business logic, infrastructure, APIs, mobile apps, roadmap.
 Third-party supplier APIs allowed; each one's ownership/contract limits recorded in `REPOSITORY_REGISTER.md` (suppliers section, to be added).
 
