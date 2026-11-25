@@ -111,3 +111,25 @@ Real results (all commands exited `0`):
 ## Remaining risks
 
 - None. All acceptance criteria (AC1–AC9) are covered by automated integration tests.
+
+---
+
+## Corrections (O1–O3)
+
+Following the PR #18 review of commit `06b30ea`, all three items (O1–O3) were addressed:
+
+### O1 — Never log bound database query parameters or `pg` `detail` on DB errors
+- **Change**:
+  - Added `serializeSafeError()` in `apps/api/src/common/observability/logger.ts` and wired it into both Pino `serializers.err` and `ProblemDetailsFilter` (`apps/api/src/common/http/problem-details.filter.ts`).
+  - For `DrizzleQueryError` (and any error with a `params` array or `query` string), logs the SQL text without parameters, strips the `params:` line from the stack header, and extracts only safe PostgreSQL `cause` fields (`code`, `constraint`, `table`, `column`, `routine`) — explicitly excluding `detail`.
+- **Evidence**: Added test `O1: Failing Drizzle query with secret params never logs bound parameters but logs SQLSTATE code` in `apps/api/src/common/observability/observability.spec.ts` — a failing parameterized query carrying a secret session token and email produces raw logs containing neither secret while preserving SQL text and SQLSTATE `42883` (`cause.detail` undefined).
+
+### O2 — Recursive redaction at any depth (including inside arrays)
+- **Change**:
+  - Replaced shallow `redact.paths` with `redactDeep()` in `apps/api/src/common/observability/logger.ts` wired into Pino `formatters.log`, recursively redacting all sensitive keys (`authorization`, `cookie`, `set-cookie`, `x-webhook-signature`, `password`, `newPassword`, `token`, `secret`, `rawBody`, `cardNumber`, `cvv`, case-insensitive) at any nesting depth including inside arrays, with depth (`10`), collection-size (`100`), and circular-reference guards.
+- **Evidence**: Added test `O2: Recursive redaction strips sensitive keys at 1, 2, and 4 levels deep including inside arrays` in `observability.spec.ts` asserting on the raw log buffer that secrets at 1, 2, and 4 levels and inside nested arrays are all replaced with `[REDACTED]`.
+
+### O3 — `pino-pretty` devDependency only; never loaded in production
+- **Change**: Verified `pino-pretty` is in `devDependencies` only in `apps/api/package.json` and guarded `createPinoLogger()` so `pino-pretty` transport is never loaded when `NODE_ENV === 'production'` even if `LOG_PRETTY=1`.
+- **Evidence**: Added test `O3: Production mode never enables pino-pretty even when LOG_PRETTY=1` in `observability.spec.ts`.
+

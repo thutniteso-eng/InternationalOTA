@@ -2,7 +2,11 @@ import { HttpStatus, type INestApplication } from '@nestjs/common';
 import type { Express, NextFunction, Request, Response } from 'express';
 import type { Logger } from 'pino';
 import { pinoHttp } from 'pino-http';
-import { createPinoLogger, PinoNestLogger } from './common/observability/logger.js';
+import {
+  createPinoLogger,
+  PINO_SERIALIZERS,
+  PinoNestLogger,
+} from './common/observability/logger.js';
 import { resolveRequestId, runWithRequestContext } from './common/observability/request-context.js';
 import { IdentityService } from './modules/identity/index.js';
 
@@ -54,6 +58,7 @@ export function configureApp(app: INestApplication, options: ConfigureAppOptions
 
   const httpLogger = pinoHttp({
     logger: pinoLogger,
+    serializers: PINO_SERIALIZERS,
     genReqId: (req) =>
       (req as Request & { requestId?: string }).requestId ??
       resolveRequestId(req.headers['x-request-id']),

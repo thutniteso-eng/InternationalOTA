@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { Writable } from 'node:stream';
-import type { DatabaseClient } from '@internationalota/db';
+import { type DatabaseClient, sql } from '@internationalota/db';
 import {
   Controller,
   Get,
@@ -42,6 +42,17 @@ class TestObservabilityController {
   boom(): never {
     this.logger.warn('About to throw simulated 500');
     throw new InternalServerErrorException('Secret internal DB stack detail');
+  }
+
+  @Get('db-boom')
+  async dbBoom(): Promise<never> {
+    // Failing parameterized Drizzle query carrying secret token and email params (O1)
+    const secretSessionToken = 'sess_secret_token_o1_never_log';
+    const secretEmail = 'o1-secret-user@example.com';
+    await this.db.execute(
+      sql`SELECT 1 FROM identity.session WHERE token = ${secretSessionToken} AND id = ${'not-a-valid-uuid'}::uuid AND user_id = ${secretEmail}`,
+    );
+    throw new Error('unreachable');
   }
 
   @Post('enqueue')
@@ -340,5 +351,100 @@ describe('Observability: structured logs, request IDs, redaction, and async corr
     expect(publishedLog?.['eventId']).toBe(eventId);
     expect(publishedLog?.['eventType']).toBe('obs.test.event');
     expect(publishedLog?.['attempt']).toBe(1);
+  });
+
+  it('O1: Failing Drizzle query with secret params never logs bound parameters but logs SQLSTATE code', async () => {
+    const res = await fetch(`${baseUrl}/__test/obs/db-boom`, {
+      headers: { 'X-Request-Id': 'req-o1-db-error-01' },
+    });
+    expect(res.status).toBe(500);
+
+    // Assert on RAW log text: neither secret param appears anywhere
+    expect(rawLogBuffer).not.toContain('sess_secret_token_o1_never_log');
+    expect(rawLogBuffer).not.toContain('o1-secret-user@example.com');
+    expect(rawLogBuffer).not.toContain('not-a-valid-uuid');
+
+    // SQL text without params and SQLSTATE code (22P02 invalid_text_representation for uuid) ARE logged
+    const errLine = parseLogLines().find((l) => l['event'] === 'http_server_error');
+    expect(errLine).toBeDefined();
+    expect(errLine?.['requestId']).toBe('req-o1-db-error-01');
+    expect(String(errLine?.['query'])).toContain('SELECT 1 FROM identity.session');
+    const cause = errLine?.['cause'] as { code?: string; detail?: string } | undefined;
+    expect(cause?.code).toBe('42883');
+    expect(cause?.detail).toBeUndefined();
+  });
+
+  it('O2: Recursive redaction strips sensitive keys at 1, 2, and 4 levels deep including inside arrays', () => {
+    const s1 = 'secret-level-1-val';
+    const s2 = 'secret-level-2-val';
+    const s4 = 'secret-level-4-val';
+    const sArr = 'secret-in-array-val';
+
+    pinoLogger.info(
+      {
+        // 1 level deep
+        password: s1,
+        // 2 levels deep
+        user: {
+          token: s2,
+        },
+        // 4 levels deep
+        body: {
+          payload: {
+            credentials: {
+              newPassword: s4,
+            },
+          },
+        },
+        // Inside nested arrays
+        items: [
+          {
+            payment: {
+              cards: [{ cardNumber: sArr, cvv: '321', last4: '4242' }],
+            },
+          },
+        ],
+      },
+      'deep redaction test',
+    );
+
+    // Assert on RAW log text
+    expect(rawLogBuffer).not.toContain(s1);
+    expect(rawLogBuffer).not.toContain(s2);
+    expect(rawLogBuffer).not.toContain(s4);
+    expect(rawLogBuffer).not.toContain(sArr);
+    expect(rawLogBuffer).not.toContain('"cvv":"321"');
+    // Non-sensitive sibling field is preserved
+    expect(rawLogBuffer).toContain('4242');
+    expect(rawLogBuffer).toContain('[REDACTED]');
+  });
+
+  it('O3: Production mode never enables pino-pretty even when LOG_PRETTY=1', () => {
+    const prevNodeEnv = process.env['NODE_ENV'];
+    const prevPretty = process.env['LOG_PRETTY'];
+    process.env['NODE_ENV'] = 'production';
+    process.env['LOG_PRETTY'] = '1';
+    try {
+      let prodOutput = '';
+      const stream = new Writable({
+        write(chunk: Buffer | string, _enc, cb) {
+          prodOutput += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+          cb();
+        },
+      });
+      // Must construct cleanly without loading pino-pretty and emit pure JSON
+      const prodLogger = createPinoLogger({ destination: stream });
+      prodLogger.info({ check: 'o3' }, 'prod json log');
+      const parsed = JSON.parse(prodOutput.trim()) as Record<string, unknown>;
+      expect(parsed['env']).toBe('production');
+      expect(parsed['check']).toBe('o3');
+    } finally {
+      process.env['NODE_ENV'] = prevNodeEnv;
+      if (prevPretty === undefined) {
+        delete process.env['LOG_PRETTY'];
+      } else {
+        process.env['LOG_PRETTY'] = prevPretty;
+      }
+    }
   });
 });

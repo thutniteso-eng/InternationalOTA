@@ -4,35 +4,192 @@ import pino, { type DestinationStream, type Logger, type LoggerOptions } from 'p
 import { getActiveTraceId } from '../../tracing.js';
 import { getRequestId } from './request-context.js';
 
-export const REDACT_PATHS = [
-  'req.headers.authorization',
-  'req.headers.cookie',
-  'req.headers["set-cookie"]',
-  'req.headers["x-webhook-signature"]',
-  'res.headers["set-cookie"]',
-  'headers.authorization',
-  'headers.cookie',
-  'headers["set-cookie"]',
-  'headers["x-webhook-signature"]',
-  '*.authorization',
-  '*.cookie',
-  '*.password',
-  '*.newPassword',
-  '*.token',
-  '*.secret',
-  '*.rawBody',
-  '*.cardNumber',
-  '*.cvv',
+const MAX_REDACT_DEPTH = 10;
+const MAX_COLLECTION_ITEMS = 100;
+
+export const SENSITIVE_KEYS = new Set([
+  'authorization',
+  'cookie',
+  'set-cookie',
+  'x-webhook-signature',
   'password',
-  'newPassword',
+  'newpassword',
   'token',
   'secret',
-  'rawBody',
-  'cardNumber',
+  'rawbody',
+  'cardnumber',
   'cvv',
-];
+]);
 
 const SENSITIVE_HEADERS = new Set(['authorization', 'cookie', 'set-cookie', 'x-webhook-signature']);
+
+export interface SafeDatabaseCause {
+  code?: string;
+  constraint?: string;
+  table?: string;
+  column?: string;
+  routine?: string;
+}
+
+export interface SafeSerializedError {
+  type: string;
+  message: string;
+  query?: string;
+  stack?: string;
+  cause?: SafeDatabaseCause | SafeSerializedError;
+}
+
+function isDatabaseQueryError(err: unknown): err is Error & {
+  query?: unknown;
+  params?: unknown;
+  cause?: unknown;
+} {
+  if (!(err instanceof Error)) {
+    return false;
+  }
+  const rec = err as Error & { query?: unknown; params?: unknown };
+  return (
+    err.name === 'DrizzleQueryError' || Array.isArray(rec.params) || typeof rec.query === 'string'
+  );
+}
+
+function extractSafePgCause(cause: unknown): SafeDatabaseCause | undefined {
+  if (typeof cause !== 'object' || cause === null) {
+    return undefined;
+  }
+  const c = cause as Record<string, unknown>;
+  const safe: SafeDatabaseCause = {};
+  if (typeof c['code'] === 'string') safe.code = c['code'];
+  if (typeof c['constraint'] === 'string') safe.constraint = c['constraint'];
+  if (typeof c['table'] === 'string') safe.table = c['table'];
+  if (typeof c['column'] === 'string') safe.column = c['column'];
+  if (typeof c['routine'] === 'string') safe.routine = c['routine'];
+  return Object.keys(safe).length > 0 ? safe : undefined;
+}
+
+function stripStackHeader(stack: string | undefined): string | undefined {
+  if (!stack) {
+    return undefined;
+  }
+  const frames = stack
+    .split('\n')
+    .filter((line) => line.trimStart().startsWith('at '))
+    .join('\n');
+  return frames.length > 0 ? frames : undefined;
+}
+
+/**
+ * Serializes errors safely for structured logging (O1).
+ *
+ * For `DrizzleQueryError` (and any error carrying a `params` array or `query` string),
+ * strips bound parameters from both `message` and `stack`, logs the SQL text without
+ * params, and extracts only safe PostgreSQL `cause` fields (`code`, `constraint`,
+ * `table`, `column`, `routine`) — explicitly excluding `detail` which can contain PII.
+ */
+export function serializeSafeError(err: unknown): SafeSerializedError {
+  if (isDatabaseQueryError(err)) {
+    const queryText =
+      typeof err.query === 'string'
+        ? err.query
+        : err.message
+            .replace(/^Failed query:\s*/i, '')
+            .split('\nparams:')[0]
+            ?.trim();
+    const safeCause = extractSafePgCause(err.cause);
+    const safeFrames = stripStackHeader(err.stack);
+    return {
+      type: err.name || 'DatabaseQueryError',
+      message: 'Database query failed',
+      ...(queryText ? { query: queryText } : {}),
+      ...(safeCause ? { cause: safeCause } : {}),
+      ...(safeFrames ? { stack: safeFrames } : {}),
+    };
+  }
+
+  if (err instanceof Error) {
+    const withCause = err as Error & { cause?: unknown };
+    const safePgCause = extractSafePgCause(withCause.cause);
+    const safeCause = safePgCause
+      ? safePgCause
+      : withCause.cause instanceof Error
+        ? serializeSafeError(withCause.cause)
+        : undefined;
+    return {
+      type: err.name || 'Error',
+      message: err.message,
+      ...(err.stack ? { stack: err.stack } : {}),
+      ...(safeCause ? { cause: safeCause } : {}),
+    };
+  }
+
+  return {
+    type: typeof err,
+    message: String(err),
+  };
+}
+
+/**
+ * Recursively redacts sensitive keys at ANY nesting depth (including inside arrays),
+ * with depth, collection-size, and circular-reference guards (O2).
+ */
+export function redactDeep(
+  value: unknown,
+  depth = 0,
+  seen: WeakSet<object> = new WeakSet(),
+): unknown {
+  if (value === null || value === undefined || typeof value !== 'object') {
+    return value;
+  }
+
+  if (value instanceof Error) {
+    return serializeSafeError(value);
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (Buffer.isBuffer(value)) {
+    return `[Buffer:${value.length}]`;
+  }
+
+  if (depth >= MAX_REDACT_DEPTH) {
+    return '[MaxDepth]';
+  }
+
+  if (seen.has(value)) {
+    return '[Circular]';
+  }
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    const limit = Math.min(value.length, MAX_COLLECTION_ITEMS);
+    const result: unknown[] = [];
+    for (let i = 0; i < limit; i++) {
+      result.push(redactDeep(value[i], depth + 1, seen));
+    }
+    if (value.length > MAX_COLLECTION_ITEMS) {
+      result.push(`[Truncated:${value.length - MAX_COLLECTION_ITEMS}]`);
+    }
+    return result;
+  }
+
+  const out: Record<string, unknown> = {};
+  const entries = Object.entries(value as Record<string, unknown>);
+  const limit = Math.min(entries.length, MAX_COLLECTION_ITEMS);
+  for (let i = 0; i < limit; i++) {
+    const [key, val] = entries[i]!;
+    if (SENSITIVE_KEYS.has(key.toLowerCase())) {
+      out[key] = '[REDACTED]';
+    } else {
+      out[key] = redactDeep(val, depth + 1, seen);
+    }
+  }
+  if (entries.length > MAX_COLLECTION_ITEMS) {
+    out['_truncatedKeys'] = entries.length - MAX_COLLECTION_ITEMS;
+  }
+  return out;
+}
 
 function sanitizeHeaders(
   headers: Record<string, string | string[] | undefined> | undefined,
@@ -47,15 +204,31 @@ function sanitizeHeaders(
   return clean;
 }
 
+export const PINO_SERIALIZERS = {
+  // Drop request bodies by default and sanitize sensitive headers
+  req: (req: IncomingMessage & { id?: string; requestId?: string }) => ({
+    id: req.requestId ?? req.id,
+    method: req.method,
+    url: req.url,
+    headers: sanitizeHeaders(req.headers),
+  }),
+  res: (res: ServerResponse) => ({
+    statusCode: res.statusCode,
+  }),
+  err: serializeSafeError,
+};
+
 export interface CreatePinoLoggerOptions {
   destination?: DestinationStream;
   level?: string;
 }
 
 /**
- * Creates a structured JSON Pino logger with mandatory redaction,
- * ISO UTC timestamps, `service: 'api'`, `env`, and automatic
- * `requestId` + `traceId` injection via AsyncLocalStorage / OTel context.
+ * Creates a structured JSON Pino logger with recursive deep redaction,
+ * safe DB error serialization, ISO UTC timestamps, `service: 'api'`, `env`,
+ * and automatic `requestId` + `traceId` injection.
+ *
+ * `pino-pretty` is a devDependency and is NEVER loaded when `NODE_ENV === 'production'`.
  */
 export function createPinoLogger(options: CreatePinoLoggerOptions = {}): Logger {
   const nodeEnv = process.env['NODE_ENV'] ?? 'development';
@@ -72,6 +245,7 @@ export function createPinoLogger(options: CreatePinoLoggerOptions = {}): Logger 
     timestamp: pino.stdTimeFunctions.isoTime,
     formatters: {
       level: (label) => ({ level: label }),
+      log: (obj) => redactDeep(obj) as Record<string, unknown>,
     },
     mixin: () => {
       const fields: Record<string, string> = {};
@@ -86,22 +260,16 @@ export function createPinoLogger(options: CreatePinoLoggerOptions = {}): Logger 
       return fields;
     },
     redact: {
-      paths: REDACT_PATHS,
+      paths: [
+        'req.headers.authorization',
+        'req.headers.cookie',
+        'req.headers["set-cookie"]',
+        'req.headers["x-webhook-signature"]',
+        'res.headers["set-cookie"]',
+      ],
       censor: '[REDACTED]',
     },
-    serializers: {
-      // Drop request bodies by default and sanitize sensitive headers
-      req: (req: IncomingMessage & { id?: string; requestId?: string }) => ({
-        id: req.requestId ?? req.id,
-        method: req.method,
-        url: req.url,
-        headers: sanitizeHeaders(req.headers),
-      }),
-      res: (res: ServerResponse) => ({
-        statusCode: res.statusCode,
-      }),
-      err: pino.stdSerializers.err,
-    },
+    serializers: PINO_SERIALIZERS,
   };
 
   if (usePretty) {
@@ -176,7 +344,7 @@ export class PinoNestLogger implements LoggerService {
     }
 
     if (message instanceof Error) {
-      this.pinoLogger[level]({ ...baseObj, err: message }, message.message);
+      this.pinoLogger[level]({ ...baseObj, err: serializeSafeError(message) }, 'error');
       return;
     }
 
