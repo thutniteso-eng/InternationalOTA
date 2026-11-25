@@ -5,6 +5,7 @@ export const REQUEST_ID_REGEX = /^[A-Za-z0-9._-]{8,64}$/;
 
 export interface RequestContextStore {
   requestId: string;
+  locale?: string;
 }
 
 const requestContextStorage = new AsyncLocalStorage<RequestContextStore>();
@@ -24,6 +25,10 @@ export function getRequestId(): string | undefined {
   return requestContextStorage.getStore()?.requestId;
 }
 
-export function runWithRequestContext<T>(requestId: string, fn: () => T): T {
-  return requestContextStorage.run({ requestId }, fn);
+export function getRequestLocale(): string | undefined {
+  return requestContextStorage.getStore()?.locale;
+}
+
+export function runWithRequestContext<T>(requestId: string, fn: () => T, locale?: string): T {
+  return requestContextStorage.run({ requestId, ...(locale ? { locale } : {}) }, fn);
 }

@@ -86,7 +86,9 @@ describe('HealthController (HTTP)', () => {
     const failingUrl = await failingApp.getUrl();
 
     try {
-      const response = await fetch(`${failingUrl}/health/ready`);
+      const response = await fetch(`${failingUrl}/health/ready`, {
+        headers: { 'Accept-Language': 'en' },
+      });
       expect(response.status).toBe(503);
       expect(response.headers.get('Content-Type')).toContain('application/problem+json');
 

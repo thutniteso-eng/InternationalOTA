@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@internationalota/db": "workspace:*",
+    "@internationalota/i18n": "workspace:*",
     "@internationalota/money": "workspace:*",
     "@internationalota/shared": "workspace:*",
     "@internationalota/time": "workspace:*",
