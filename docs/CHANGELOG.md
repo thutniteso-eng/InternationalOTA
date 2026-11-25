@@ -22,3 +22,4 @@
 - P1-10 merged (PR #18): DB-error parameter leak (O1) and shallow redaction (O2) fixed; regression O4 (errors logged as [object Object]) caught and fixed. Claude's O3 finding was a misread. Added TASK-P1-11 spec.
 - P1-11 merged (PR #20) with limitations I1 (duplicate exponent table, caused by Claude's spec asking for KWD) and I2 (message-matching i18n). D-017 staging on Owner's WSL + Cloudflare quick tunnel. Added TASK-P1-12 spec (closes L1–L3, P1-09 roles, I1–I2).
 - 2026-11-26: P1-12 merged (PR #22). Phase 1 implementation complete; gate review written (reports/PHASE-1-GATE.md).
+- 2026-11-26: Owner approved Phase 2 (D-019) and verified-email-before-payment (D-018). Added TASK-P2-01 (catalog).
