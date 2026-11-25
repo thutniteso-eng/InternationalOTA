@@ -6,7 +6,7 @@ export {
   type MessageCatalog,
 } from './catalogs.ts';
 export { formatInstant, formatLocalDate } from './format-date.ts';
-export { formatMoney, type FormattableMoney } from './format-money.ts';
+export { formatMoney } from './format-money.ts';
 export {
   FALLBACK_DEFAULT_LOCALE,
   getDefaultLocale,

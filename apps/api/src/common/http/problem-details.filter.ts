@@ -47,73 +47,6 @@ const KNOWN_STATUS_DETAIL_KEYS: Readonly<Record<number, string>> = {
   [HttpStatus.INTERNAL_SERVER_ERROR]: 'http.500.detail',
 };
 
-interface OwnedMessageMapping {
-  readonly key: string;
-  readonly params?: Record<string, string | number>;
-}
-
-/**
- * Maps known platform-owned English exception messages to catalog keys so
- * `ProblemDetailsFilter` localizes `detail` cleanly without changing domain throw sites.
- */
-function matchOwnedHttpErrorMessage(status: number, rawDetail: string): OwnedMessageMapping | null {
-  if (status === Number(HttpStatus.BAD_REQUEST) && rawDetail.startsWith('Idempotency-Key header')) {
-    return { key: 'http.400.invalidIdempotencyKey' };
-  }
-  if (status === Number(HttpStatus.UNAUTHORIZED)) {
-    if (rawDetail === 'Authentication required') {
-      return { key: 'http.401.authRequired' };
-    }
-    if (rawDetail === 'Missing webhook signature') {
-      return { key: 'http.401.missingWebhookSignature' };
-    }
-    if (
-      rawDetail === 'Invalid webhook signature' ||
-      rawDetail === 'Invalid webhook signature format' ||
-      rawDetail === 'Webhook verification secret is not configured'
-    ) {
-      return { key: 'http.401.invalidWebhookSignature' };
-    }
-    if (
-      rawDetail === 'Invalid webhook JSON payload' ||
-      rawDetail === 'Webhook payload must be a JSON object' ||
-      rawDetail.startsWith('Signed webhook body must contain')
-    ) {
-      return { key: 'http.401.invalidWebhookPayload' };
-    }
-  }
-  if (status === Number(HttpStatus.FORBIDDEN)) {
-    if (rawDetail === 'Insufficient role permissions') {
-      return { key: 'http.403.insufficientRole' };
-    }
-    if (rawDetail === 'Cannot access another user resource') {
-      return { key: 'http.403.crossAccountForbidden' };
-    }
-  }
-  if (status === Number(HttpStatus.NOT_FOUND)) {
-    const providerMatch = /^Unknown webhook provider:\s*(.+)$/.exec(rawDetail);
-    if (providerMatch?.[1]) {
-      return {
-        key: 'http.404.unknownWebhookProvider',
-        params: { provider: providerMatch[1] },
-      };
-    }
-  }
-  if (
-    status === Number(HttpStatus.CONFLICT) &&
-    rawDetail === 'A request with this idempotency key is currently in progress'
-  ) {
-    return { key: 'http.409.idempotencyInProgress' };
-  }
-  if (
-    status === Number(HttpStatus.UNPROCESSABLE_ENTITY) &&
-    rawDetail === 'Idempotency key was previously used with a different request payload'
-  ) {
-    return { key: 'http.422.idempotencyKeyReuse' };
-  }
-  return null;
-}
-
 function mapLedgerError(
   err: LedgerError,
   locale: string,
@@ -182,6 +115,7 @@ function mapLedgerError(
  * errors to RFC 9457 Problem Details (`application/problem+json`).
  *
  * - Localizes `title` and `detail` according to the resolved request locale (`Content-Language`).
+ * - Platform-owned HttpExceptions attach explicit `i18nKey` (and optional `i18nParams`) — I2.
  * - Keeps `type`, `status`, and machine-readable fields language-independent.
  * - Keeps server-side structured error logs in English (never localized).
  * - For 5xx responses, internal error details are never exposed to clients.
@@ -250,26 +184,21 @@ export class ProblemDetailsFilter implements ExceptionFilter {
 
         if (explicitKey) {
           detail = t(locale, explicitKey, explicitParams);
+        } else if (
+          !rawDetail ||
+          rawDetail === exception.name ||
+          rawDetail === 'Unauthorized' ||
+          rawDetail === 'Forbidden' ||
+          rawDetail === 'Not Found' ||
+          rawDetail === 'Bad Request' ||
+          rawDetail === 'Conflict' ||
+          rawDetail === 'Unprocessable Entity' ||
+          rawDetail === 'Too Many Requests'
+        ) {
+          const defaultDetailKey = KNOWN_STATUS_DETAIL_KEYS[status];
+          detail = defaultDetailKey ? t(locale, defaultDetailKey) : rawDetail;
         } else {
-          const owned = matchOwnedHttpErrorMessage(status, rawDetail);
-          if (owned) {
-            detail = t(locale, owned.key, owned.params);
-          } else if (
-            !rawDetail ||
-            rawDetail === exception.name ||
-            rawDetail === 'Unauthorized' ||
-            rawDetail === 'Forbidden' ||
-            rawDetail === 'Not Found' ||
-            rawDetail === 'Bad Request' ||
-            rawDetail === 'Conflict' ||
-            rawDetail === 'Unprocessable Entity' ||
-            rawDetail === 'Too Many Requests'
-          ) {
-            const defaultDetailKey = KNOWN_STATUS_DETAIL_KEYS[status];
-            detail = defaultDetailKey ? t(locale, defaultDetailKey) : rawDetail;
-          } else {
-            detail = rawDetail;
-          }
+          detail = rawDetail;
         }
       }
 

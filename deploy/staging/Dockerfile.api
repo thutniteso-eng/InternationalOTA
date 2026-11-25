@@ -1,0 +1,66 @@
+# syntax=docker/dockerfile:1
+
+FROM node:24.22.3-alpine AS base
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN npm install -g pnpm@10.29.3
+WORKDIR /app
+
+FROM base AS builder
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY apps/api/package.json ./apps/api/
+COPY apps/web/package.json ./apps/web/
+COPY packages/db/package.json ./packages/db/
+COPY packages/i18n/package.json ./packages/i18n/
+COPY packages/money/package.json ./packages/money/
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/time/package.json ./packages/time/
+RUN pnpm install --frozen-lockfile
+
+COPY packages ./packages
+COPY apps/api ./apps/api
+RUN pnpm --filter "./packages/**" build && pnpm --filter @internationalota/api build
+
+FROM base AS prod-deps
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json ./apps/api/
+COPY apps/web/package.json ./apps/web/
+COPY packages/db/package.json ./packages/db/
+COPY packages/i18n/package.json ./packages/i18n/
+COPY packages/money/package.json ./packages/money/
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/time/package.json ./packages/time/
+RUN pnpm install --prod --frozen-lockfile --ignore-scripts
+
+FROM node:24.22.3-alpine AS runner
+WORKDIR /app
+RUN addgroup -S -g 1001 ota && adduser -S -u 1001 -G ota ota
+
+COPY --from=prod-deps /app/package.json /app/pnpm-workspace.yaml ./
+COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=prod-deps /app/packages/shared/package.json ./packages/shared/
+COPY --from=prod-deps /app/packages/money/package.json ./packages/money/
+COPY --from=prod-deps /app/packages/time/package.json ./packages/time/
+COPY --from=prod-deps /app/packages/db/package.json ./packages/db/
+COPY --from=prod-deps /app/packages/db/node_modules ./packages/db/node_modules
+COPY --from=prod-deps /app/packages/i18n/package.json ./packages/i18n/
+COPY --from=prod-deps /app/packages/i18n/node_modules ./packages/i18n/node_modules
+COPY --from=prod-deps /app/packages/time/node_modules ./packages/time/node_modules
+COPY --from=prod-deps /app/apps/api/package.json ./apps/api/
+COPY --from=prod-deps /app/apps/api/node_modules ./apps/api/node_modules
+
+COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
+COPY --from=builder /app/packages/money/dist ./packages/money/dist
+COPY --from=builder /app/packages/time/dist ./packages/time/dist
+COPY --from=builder /app/packages/db/dist ./packages/db/dist
+COPY --from=builder /app/packages/db/migrations ./packages/db/migrations
+COPY --from=builder /app/packages/db/reference-data ./packages/db/reference-data
+COPY --from=builder /app/packages/i18n/dist ./packages/i18n/dist
+COPY --from=builder /app/apps/api/dist ./apps/api/dist
+
+RUN chown -R ota:ota /app
+USER ota
+
+ENV NODE_ENV=production
+EXPOSE 4000
+CMD ["node", "apps/api/dist/main.js"]

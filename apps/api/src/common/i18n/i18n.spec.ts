@@ -1,6 +1,13 @@
 import { PassThrough } from 'node:stream';
 import { seedReferenceData } from '@internationalota/db';
-import { Controller, Get, Post, UseGuards, type INestApplication } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Post,
+  UseGuards,
+  type INestApplication,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestDatabase, type TestDbInstance } from '../../../test/test-db.js';
@@ -26,6 +33,15 @@ class TestI18nController {
   @Idempotent()
   idempotentEndpoint(): { created: true } {
     return { created: true };
+  }
+
+  @Get('explicit-i18n-key')
+  throwExplicitKey(): never {
+    throw new BadRequestException({
+      message: 'Unlocalized fallback text that must be replaced by i18nKey',
+      i18nKey: 'http.404.unknownWebhookProvider',
+      i18nParams: { provider: 'demo-pay' },
+    });
   }
 
   @Get('ledger-unbalanced')
@@ -218,5 +234,41 @@ describe('API i18n & localized ProblemDetails integration tests (P1-11)', () => 
     // Server log remains English
     expect(rawLogs).toContain('http_server_error');
     expect(rawLogs).toContain('Unexpected database timeout');
+  });
+
+  it('I2: localizes explicit i18nKey + i18nParams and unknown webhook provider / missing idempotency key in vi and en', async () => {
+    const resExplicitVi = await fetch(`${baseUrl}/__test/i18n/explicit-i18n-key`, {
+      headers: { 'Accept-Language': 'vi' },
+    });
+    const bodyExplicitVi = (await resExplicitVi.json()) as Record<string, unknown>;
+    expect(resExplicitVi.status).toBe(400);
+    expect(bodyExplicitVi['detail']).toBe('Nhà cung cấp webhook không được hỗ trợ: demo-pay.');
+
+    const resExplicitEn = await fetch(`${baseUrl}/__test/i18n/explicit-i18n-key`, {
+      headers: { 'Accept-Language': 'en' },
+    });
+    const bodyExplicitEn = (await resExplicitEn.json()) as Record<string, unknown>;
+    expect(resExplicitEn.status).toBe(400);
+    expect(bodyExplicitEn['detail']).toBe('Unknown webhook provider: demo-pay.');
+
+    const resMissingKeyVi = await fetch(`${baseUrl}/__test/i18n/idempotent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept-Language': 'vi' },
+      body: JSON.stringify({ amount: 1 }),
+    });
+    const bodyMissingKeyVi = (await resMissingKeyVi.json()) as Record<string, unknown>;
+    expect(resMissingKeyVi.status).toBe(400);
+    expect(bodyMissingKeyVi['detail']).toContain('Idempotency-Key');
+
+    const resUnknownProvVi = await fetch(`${baseUrl}/webhooks/missing-provider`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept-Language': 'vi' },
+      body: JSON.stringify({ id: 'evt-1' }),
+    });
+    const bodyUnknownProvVi = (await resUnknownProvVi.json()) as Record<string, unknown>;
+    expect(resUnknownProvVi.status).toBe(404);
+    expect(bodyUnknownProvVi['detail']).toBe(
+      'Nhà cung cấp webhook không được hỗ trợ: missing-provider.',
+    );
   });
 });

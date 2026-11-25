@@ -103,11 +103,12 @@ describe('@internationalota/i18n', () => {
     });
   });
 
-  describe('AC3: formatMoney (forced exponents + bigint precision beyond MAX_SAFE_INTEGER)', () => {
-    it('formats VND (0 decimals), USD (2 decimals), and KWD (3 decimals) in both locales', () => {
+  describe('AC3 (I1): formatMoney (forced exponents + bigint precision beyond MAX_SAFE_INTEGER)', () => {
+    it('formats VND (0 decimals), USD (2 decimals), JPY (0 decimals), and KRW (0 decimals) in both locales', () => {
       const vnd = createMoney(1500000n, 'VND');
       const usd = createMoney(12345n, 'USD');
-      const kwd = { amountMinor: 12345n, currency: 'KWD' } as const;
+      const jpy = createMoney(12345n, 'JPY');
+      const krw = createMoney(12345n, 'KRW');
 
       // VND: 0 fraction digits in both locales
       const vndEn = formatMoney(vnd, 'en');
@@ -121,9 +122,12 @@ describe('@internationalota/i18n', () => {
       expect(formatMoney(usd, 'en')).toContain('123.45');
       expect(formatMoney(usd, 'vi')).toContain('123,45');
 
-      // KWD: 3 fraction digits in both locales
-      expect(formatMoney(kwd, 'en')).toContain('12.345');
-      expect(formatMoney(kwd, 'vi')).toContain('12,345');
+      // JPY & KRW: 0 fraction digits in both locales
+      expect(formatMoney(jpy, 'en')).toContain('12,345');
+      expect(formatMoney(jpy, 'en')).not.toMatch(/\.\d+/);
+      expect(formatMoney(jpy, 'vi')).toContain('12.345');
+      expect(formatMoney(krw, 'en')).toContain('12,345');
+      expect(formatMoney(krw, 'vi')).toContain('12.345');
     });
 
     it('formats 9007199254740993n minor units exactly with zero precision loss', () => {
@@ -136,9 +140,9 @@ describe('@internationalota/i18n', () => {
       expect(formatMoney(hugeUsd, 'en')).toContain('90,071,992,547,409.93');
       expect(formatMoney(hugeUsd, 'vi')).toContain('90.071.992.547.409,93');
 
-      const hugeKwd = { amountMinor: 9007199254740993n, currency: 'KWD' } as const;
-      expect(formatMoney(hugeKwd, 'en')).toContain('9,007,199,254,740.993');
-      expect(formatMoney(hugeKwd, 'vi')).toContain('9.007.199.254.740,993');
+      const hugeJpy = createMoney(9007199254740993n, 'JPY');
+      expect(formatMoney(hugeJpy, 'en')).toContain('9,007,199,254,740,993');
+      expect(formatMoney(hugeJpy, 'vi')).toContain('9.007.199.254.740.993');
     });
   });
 

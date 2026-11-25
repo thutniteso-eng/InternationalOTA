@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { resolveAppEnv } from '@internationalota/shared';
 import type { LoggerService } from '@nestjs/common';
 import pino, { type DestinationStream, type Logger, type LoggerOptions } from 'pino';
 import { getActiveTraceId } from '../../tracing.js';
@@ -252,15 +253,21 @@ export interface CreatePinoLoggerOptions {
  */
 export function createPinoLogger(options: CreatePinoLoggerOptions = {}): Logger {
   const nodeEnv = process.env['NODE_ENV'] ?? 'development';
+  const appEnv = resolveAppEnv(process.env['APP_ENV'], nodeEnv);
   const level = options.level ?? process.env['LOG_LEVEL'] ?? 'info';
   const usePretty =
-    !options.destination && process.env['LOG_PRETTY'] === '1' && nodeEnv !== 'production';
+    !options.destination &&
+    process.env['LOG_PRETTY'] === '1' &&
+    nodeEnv !== 'production' &&
+    appEnv !== 'staging' &&
+    appEnv !== 'production';
 
   const pinoOptions: LoggerOptions = {
     level,
     base: {
       service: 'api',
       env: nodeEnv,
+      appEnv,
     },
     timestamp: pino.stdTimeFunctions.isoTime,
     formatters: {

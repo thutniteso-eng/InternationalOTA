@@ -53,15 +53,24 @@ describe('Identity & access module integration tests (P1-06)', () => {
   let previousDatabaseUrl: string | undefined;
   let previousAuthSecret: string | undefined;
   let previousTrustedOrigins: string | undefined;
+  let previousTrustedProxyCidrs: string | undefined;
+  let previousPublicBaseUrl: string | undefined;
+  let previousAppEnv: string | undefined;
 
   beforeAll(async () => {
     process.env['NODE_ENV'] = 'test';
     previousDatabaseUrl = process.env['DATABASE_URL'];
     previousAuthSecret = process.env['BETTER_AUTH_SECRET'];
     previousTrustedOrigins = process.env['AUTH_TRUSTED_ORIGINS'];
+    previousTrustedProxyCidrs = process.env['TRUSTED_PROXY_CIDRS'];
+    previousPublicBaseUrl = process.env['PUBLIC_BASE_URL'];
+    previousAppEnv = process.env['APP_ENV'];
 
     process.env['BETTER_AUTH_SECRET'] = TEST_AUTH_SECRET;
     process.env['AUTH_TRUSTED_ORIGINS'] = 'http://localhost:3000,http://127.0.0.1';
+    process.env['TRUSTED_PROXY_CIDRS'] = '127.0.0.1/32,::1/128';
+    delete process.env['PUBLIC_BASE_URL'];
+    delete process.env['APP_ENV'];
 
     testDb = await createTestDatabase();
     process.env['DATABASE_URL'] = testDb.testUrl;
@@ -90,6 +99,21 @@ describe('Identity & access module integration tests (P1-06)', () => {
       delete process.env['AUTH_TRUSTED_ORIGINS'];
     } else {
       process.env['AUTH_TRUSTED_ORIGINS'] = previousTrustedOrigins;
+    }
+    if (previousTrustedProxyCidrs === undefined) {
+      delete process.env['TRUSTED_PROXY_CIDRS'];
+    } else {
+      process.env['TRUSTED_PROXY_CIDRS'] = previousTrustedProxyCidrs;
+    }
+    if (previousPublicBaseUrl === undefined) {
+      delete process.env['PUBLIC_BASE_URL'];
+    } else {
+      process.env['PUBLIC_BASE_URL'] = previousPublicBaseUrl;
+    }
+    if (previousAppEnv === undefined) {
+      delete process.env['APP_ENV'];
+    } else {
+      process.env['APP_ENV'] = previousAppEnv;
     }
     if (testDb) {
       await testDb.teardown();
@@ -384,6 +408,9 @@ describe('Identity & access module integration tests (P1-06)', () => {
   it('AC6: Startup fails fast when BETTER_AUTH_SECRET is missing/short or in production without a real EmailSender', () => {
     const savedSecret = process.env['BETTER_AUTH_SECRET'];
     const savedNodeEnv = process.env['NODE_ENV'];
+    const savedAppEnv = process.env['APP_ENV'];
+    const savedPublicBaseUrl = process.env['PUBLIC_BASE_URL'];
+    const savedTrustedOrigins = process.env['AUTH_TRUSTED_ORIGINS'];
 
     try {
       // 1. Missing secret
@@ -397,17 +424,207 @@ describe('Identity & access module integration tests (P1-06)', () => {
       // 3. Production mode without a real EmailSender (undefined or LogOnlyEmailSender)
       process.env['BETTER_AUTH_SECRET'] = TEST_AUTH_SECRET;
       process.env['NODE_ENV'] = 'production';
+      process.env['APP_ENV'] = 'production';
+      process.env['PUBLIC_BASE_URL'] = 'https://staging.example.com';
+      process.env['AUTH_TRUSTED_ORIGINS'] = 'https://staging.example.com';
       expect(() => new IdentityService(db)).toThrow(/production.*EmailSender/i);
 
-      // 4. Production mode WITH a real EmailSender succeeds
+      // 4. Production mode WITH a real EmailSender + base URL + trusted origins succeeds
       const realSender: EmailSender = {
         sendVerificationEmail: async () => {},
         sendResetPasswordEmail: async () => {},
       };
       expect(() => new IdentityService(db, realSender)).not.toThrow();
+
+      // 5. Staging mode (NODE_ENV=production, APP_ENV=staging) allows LogOnlyEmailSender with WARN
+      process.env['APP_ENV'] = 'staging';
+      const warnSpy = vi.spyOn(Logger.prototype, 'warn');
+      try {
+        expect(() => new IdentityService(db)).not.toThrow();
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('staging_log_only_email_sender'),
+        );
+      } finally {
+        warnSpy.mockRestore();
+      }
     } finally {
       process.env['BETTER_AUTH_SECRET'] = savedSecret;
       process.env['NODE_ENV'] = savedNodeEnv;
+      if (savedAppEnv === undefined) {
+        delete process.env['APP_ENV'];
+      } else {
+        process.env['APP_ENV'] = savedAppEnv;
+      }
+      if (savedPublicBaseUrl === undefined) {
+        delete process.env['PUBLIC_BASE_URL'];
+      } else {
+        process.env['PUBLIC_BASE_URL'] = savedPublicBaseUrl;
+      }
+      if (savedTrustedOrigins === undefined) {
+        delete process.env['AUTH_TRUSTED_ORIGINS'];
+      } else {
+        process.env['AUTH_TRUSTED_ORIGINS'] = savedTrustedOrigins;
+      }
+    }
+  });
+
+  it('L2 & L3: staging/production fail fast without PUBLIC_BASE_URL or AUTH_TRUSTED_ORIGINS, and Secure cookie tracks base URL scheme', async () => {
+    const savedAppEnv = process.env['APP_ENV'];
+    const savedNodeEnv = process.env['NODE_ENV'];
+    const savedPublicBaseUrl = process.env['PUBLIC_BASE_URL'];
+    const savedTrustedOrigins = process.env['AUTH_TRUSTED_ORIGINS'];
+    const savedTrustedCidrs = process.env['TRUSTED_PROXY_CIDRS'];
+
+    try {
+      process.env['NODE_ENV'] = 'production';
+      process.env['APP_ENV'] = 'staging';
+
+      // Missing PUBLIC_BASE_URL -> fails
+      delete process.env['PUBLIC_BASE_URL'];
+      process.env['AUTH_TRUSTED_ORIGINS'] = 'https://example.trycloudflare.com';
+      expect(() => new IdentityService(db)).toThrow(
+        /PUBLIC_BASE_URL.*must be explicitly configured/,
+      );
+
+      // Empty AUTH_TRUSTED_ORIGINS -> fails
+      process.env['PUBLIC_BASE_URL'] = 'https://example.trycloudflare.com';
+      process.env['AUTH_TRUSTED_ORIGINS'] = '';
+      expect(() => new IdentityService(db)).toThrow(/AUTH_TRUSTED_ORIGINS must be non-empty/);
+
+      // L3: HTTPS PUBLIC_BASE_URL -> Secure; HttpOnly; SameSite=Lax even if NODE_ENV=test/development
+      process.env['NODE_ENV'] = 'development';
+      process.env['APP_ENV'] = 'local';
+      process.env['PUBLIC_BASE_URL'] = 'https://cookie-check.example.com';
+      process.env['AUTH_TRUSTED_ORIGINS'] = 'https://cookie-check.example.com';
+      process.env['TRUSTED_PROXY_CIDRS'] = '127.0.0.1/32,::1/128';
+      const httpsApp = await createConfiguredTestApp();
+      try {
+        await fetch(`${httpsApp.baseUrl}/api/auth/sign-up/email`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Origin: 'https://cookie-check.example.com',
+            'X-Forwarded-For': '198.51.100.10',
+          },
+          body: JSON.stringify({
+            email: 'l3-https@example.com',
+            password: 'L3Password!2026',
+            name: 'L3 HTTPS',
+          }),
+        });
+        const signInRes = await fetch(`${httpsApp.baseUrl}/api/auth/sign-in/email`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Origin: 'https://cookie-check.example.com',
+            'X-Forwarded-For': '198.51.100.10',
+          },
+          body: JSON.stringify({
+            email: 'l3-https@example.com',
+            password: 'L3Password!2026',
+          }),
+        });
+        const setCookie = signInRes.headers.getSetCookie().join('; ');
+        expect(setCookie).toMatch(/\bSecure\b/i);
+        expect(setCookie).toMatch(/\bHttpOnly\b/i);
+        expect(setCookie).toMatch(/\bSameSite=Lax\b/i);
+      } finally {
+        await httpsApp.app.close();
+      }
+
+      // L3: HTTP PUBLIC_BASE_URL with NODE_ENV=production -> NOT Secure
+      process.env['NODE_ENV'] = 'production';
+      process.env['APP_ENV'] = 'staging';
+      process.env['PUBLIC_BASE_URL'] = 'http://localhost:4000';
+      process.env['AUTH_TRUSTED_ORIGINS'] = 'http://localhost:4000';
+      const httpApp = await createConfiguredTestApp();
+      try {
+        const signInRes = await fetch(`${httpApp.baseUrl}/api/auth/sign-in/email`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Origin: 'http://localhost:4000',
+            'X-Forwarded-For': '198.51.100.11',
+          },
+          body: JSON.stringify({
+            email: 'l3-https@example.com',
+            password: 'L3Password!2026',
+          }),
+        });
+        const setCookie = signInRes.headers.getSetCookie().join('; ');
+        expect(setCookie).not.toMatch(/\bSecure\b/i);
+        expect(setCookie).toMatch(/\bHttpOnly\b/i);
+        expect(setCookie).toMatch(/\bSameSite=Lax\b/i);
+      } finally {
+        await httpApp.app.close();
+      }
+    } finally {
+      process.env['NODE_ENV'] = savedNodeEnv;
+      if (savedAppEnv === undefined) {
+        delete process.env['APP_ENV'];
+      } else {
+        process.env['APP_ENV'] = savedAppEnv;
+      }
+      if (savedPublicBaseUrl === undefined) {
+        delete process.env['PUBLIC_BASE_URL'];
+      } else {
+        process.env['PUBLIC_BASE_URL'] = savedPublicBaseUrl;
+      }
+      if (savedTrustedOrigins === undefined) {
+        delete process.env['AUTH_TRUSTED_ORIGINS'];
+      } else {
+        process.env['AUTH_TRUSTED_ORIGINS'] = savedTrustedOrigins;
+      }
+      if (savedTrustedCidrs === undefined) {
+        delete process.env['TRUSTED_PROXY_CIDRS'];
+      } else {
+        process.env['TRUSTED_PROXY_CIDRS'] = savedTrustedCidrs;
+      }
+    }
+  });
+
+  it('L1: forged X-Forwarded-For/CF-Connecting-IP from untrusted socket does not bypass or reset rate-limit key', async () => {
+    const savedTrustedCidrs = process.env['TRUSTED_PROXY_CIDRS'];
+    delete process.env['TRUSTED_PROXY_CIDRS'];
+    const email = 'l1-untrusted@example.com';
+    await signUp(email, 'CorrectPassword!2026', 'L1 Untrusted');
+
+    const directApp = await createConfiguredTestApp();
+    try {
+      // Send 5 wrong-password requests with 5 DIFFERENT forged X-Forwarded-For & CF-Connecting-IP headers
+      for (let i = 1; i <= 5; i++) {
+        const res = await fetch(`${directApp.baseUrl}/api/auth/sign-in/email`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Origin: 'http://localhost:3000',
+            'X-Forwarded-For': `198.51.100.${i}`,
+            'CF-Connecting-IP': `203.0.113.${i}`,
+          },
+          body: JSON.stringify({ email, password: 'WrongPassword!123' }),
+        });
+        expect(res.status).toBe(401);
+      }
+
+      // 6th request with yet ANOTHER forged IP MUST STILL hit 429 because all keyed on socket IP!
+      const sixthRes = await fetch(`${directApp.baseUrl}/api/auth/sign-in/email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'http://localhost:3000',
+          'X-Forwarded-For': '192.0.2.99',
+          'CF-Connecting-IP': '192.0.2.100',
+        },
+        body: JSON.stringify({ email, password: 'WrongPassword!123' }),
+      });
+      expect(sixthRes.status).toBe(429);
+    } finally {
+      await directApp.app.close();
+      if (savedTrustedCidrs === undefined) {
+        delete process.env['TRUSTED_PROXY_CIDRS'];
+      } else {
+        process.env['TRUSTED_PROXY_CIDRS'] = savedTrustedCidrs;
+      }
     }
   });
 
@@ -478,7 +695,11 @@ describe('Identity & access module integration tests (P1-06)', () => {
 
   it('AC6 (DI): AppModule fails to compile/start when EMAIL_SENDER is LogOnlyEmailSender in production', async () => {
     const savedNodeEnv = process.env['NODE_ENV'];
+    const savedAppEnv = process.env['APP_ENV'];
+    const savedPublicBaseUrl = process.env['PUBLIC_BASE_URL'];
     process.env['NODE_ENV'] = 'production';
+    process.env['APP_ENV'] = 'production';
+    process.env['PUBLIC_BASE_URL'] = 'https://prod-di-check.example.com';
     try {
       await expect(
         Test.createTestingModule({
@@ -500,6 +721,16 @@ describe('Identity & access module integration tests (P1-06)', () => {
       await moduleRef.close();
     } finally {
       process.env['NODE_ENV'] = savedNodeEnv;
+      if (savedAppEnv === undefined) {
+        delete process.env['APP_ENV'];
+      } else {
+        process.env['APP_ENV'] = savedAppEnv;
+      }
+      if (savedPublicBaseUrl === undefined) {
+        delete process.env['PUBLIC_BASE_URL'];
+      } else {
+        process.env['PUBLIC_BASE_URL'] = savedPublicBaseUrl;
+      }
     }
   });
 });

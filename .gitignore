@@ -10,6 +10,8 @@ apps/web/AGENTS.md
 .env
 .env.*
 !.env.example
+deploy/staging/.env.staging
+deploy/staging/*.secret
 .DS_Store
 Thumbs.db
 .idea/

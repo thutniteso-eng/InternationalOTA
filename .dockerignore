@@ -1,0 +1,15 @@
+.git
+.github
+node_modules
+**/node_modules
+**/dist
+**/.next
+.turbo
+coverage
+reports
+*.log
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+deploy/staging/.env.staging
