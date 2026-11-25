@@ -1,16 +1,20 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createTestDatabase, type TestDbInstance } from '../test/test-db.js';
 import { AppModule } from './app.module.js';
 import { DRIZZLE_DB } from './database/database.module.js';
 
 describe('HealthController (HTTP)', () => {
   let app: INestApplication;
   let baseUrl: string;
+  let testDb: TestDbInstance;
+  let previousDatabaseUrl: string | undefined;
 
   beforeAll(async () => {
-    process.env.DATABASE_URL =
-      process.env.DATABASE_URL || 'postgresql://ota_user:ota_password@localhost:55432/ota_dev';
+    previousDatabaseUrl = process.env.DATABASE_URL;
+    testDb = await createTestDatabase();
+    process.env.DATABASE_URL = testDb.testUrl;
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -22,7 +26,17 @@ describe('HealthController (HTTP)', () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    if (app) {
+      await app.close();
+    }
+    if (previousDatabaseUrl === undefined) {
+      delete process.env.DATABASE_URL;
+    } else {
+      process.env.DATABASE_URL = previousDatabaseUrl;
+    }
+    if (testDb) {
+      await testDb.teardown();
+    }
   });
 
   it('GET /health returns 200 with { status: "ok" }', async () => {
@@ -41,7 +55,7 @@ describe('HealthController (HTTP)', () => {
     expect(body).toEqual({ status: 'ok', database: 'connected' });
   });
 
-  it('GET /health/ready returns 503 when database query fails', async () => {
+  it('GET /health/ready returns 503 problem+json when database query fails', async () => {
     // Create a standalone app where DRIZZLE_DB throws on execute
     const mockDb = {
       execute: () => Promise.reject(new Error('Database connection failed')),
@@ -61,12 +75,20 @@ describe('HealthController (HTTP)', () => {
     try {
       const response = await fetch(`${failingUrl}/health/ready`);
       expect(response.status).toBe(503);
+      expect(response.headers.get('Content-Type')).toContain('application/problem+json');
 
       const body = (await response.json()) as {
-        status: string;
-        database: string;
+        type: string;
+        title: string;
+        status: number;
+        detail: string;
       };
-      expect(body).toEqual({ status: 'error', database: 'disconnected' });
+      expect(body).toEqual({
+        type: 'https://httpstatuses.com/503',
+        title: 'Service Unavailable',
+        status: 503,
+        detail: 'An unexpected internal error occurred',
+      });
     } finally {
       await failingApp.close();
     }
