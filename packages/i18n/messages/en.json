@@ -63,5 +63,13 @@
   "catalog.publish.missingTranslations": "Cannot publish product: missing or incomplete required translations ({locales}).",
   "catalog.publish.missingLocation": "Cannot publish product: location coordinates are required.",
   "catalog.publish.missingTimeZone": "Cannot publish product: a valid IANA time zone is required.",
-  "catalog.publish.blocked": "Cannot publish product: missing requirements ({reasons})."
+  "catalog.publish.blocked": "Cannot publish product: missing requirements ({reasons}).",
+  "inventory.departure.notFound": "Departure was not found.",
+  "inventory.departure.capacityBelowAllocated": "Departure capacity ({capacity}) cannot be reduced below currently allocated seats ({allocated}).",
+  "inventory.departure.nonExistentLocalTime": "Local departure time {localDate} {localTime} does not exist in time zone {timeZone} due to daylight saving time transition.",
+  "inventory.departure.alreadyCancelled": "Cancelled departures cannot be reopened.",
+  "inventory.product.unsupportedKind": "Dated departures are supported only for tour and activity products (got \"{kind}\").",
+  "inventory.allocation.quantityConflict": "Allocation reference is already active with a different quantity ({existingQuantity} vs {requestedQuantity}).",
+  "inventory.allocation.alreadyReleased": "Allocation reference has already been released and cannot be reused.",
+  "inventory.query.invalidParams": "Invalid inventory query parameters: {reason}."
 }

@@ -63,5 +63,13 @@
   "catalog.publish.missingTranslations": "Không thể xuất bản sản phẩm: thiếu hoặc chưa đủ bản dịch bắt buộc ({locales}).",
   "catalog.publish.missingLocation": "Không thể xuất bản sản phẩm: thiếu tọa độ vị trí.",
   "catalog.publish.missingTimeZone": "Không thể xuất bản sản phẩm: thiếu múi giờ IANA hợp lệ.",
-  "catalog.publish.blocked": "Không thể xuất bản sản phẩm vì thiếu điều kiện: {reasons}."
+  "catalog.publish.blocked": "Không thể xuất bản sản phẩm vì thiếu điều kiện: {reasons}.",
+  "inventory.departure.notFound": "Không tìm thấy lịch khởi hành.",
+  "inventory.departure.capacityBelowAllocated": "Sức chứa ({capacity}) không thể thấp hơn số chỗ đã phân bổ ({allocated}).",
+  "inventory.departure.nonExistentLocalTime": "Giờ địa phương {localDate} {localTime} không tồn tại trong múi giờ {timeZone} do chuyển đổi giờ mùa hè (DST).",
+  "inventory.departure.alreadyCancelled": "Không thể mở lại lịch khởi hành đã hủy.",
+  "inventory.product.unsupportedKind": "Lịch khởi hành theo ngày chỉ hỗ trợ sản phẩm tour hoặc activity (nhận được \"{kind}\").",
+  "inventory.allocation.quantityConflict": "Mã tham chiếu phân bổ đã tồn tại với số lượng khác ({existingQuantity} so với {requestedQuantity}).",
+  "inventory.allocation.alreadyReleased": "Mã tham chiếu phân bổ đã được giải phóng và không thể tái sử dụng.",
+  "inventory.query.invalidParams": "Tham số tồn kho không hợp lệ: {reason}."
 }
