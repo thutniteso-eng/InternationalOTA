@@ -33,4 +33,5 @@ D-018: verified email required before payment. D-020: external integrations via 
 | Task | Status |
 |---|---|
 | P2-01 Catalog (suppliers, tours/activities, vi/en, search, geo) | MERGED #27 (limitations N1 supplier IN-list, N2 republish keeps published_at) |
-| P2-02 Dated inventory (departures, DB-enforced capacity) | READY — spec in implementation/tasks |
+| P2-02 Dated inventory (departures, DB-enforced capacity) | MERGED #29 (L1 tz change → P2-03; L2–L5 documented on PR) |
+| P2-03 Pricing & cancellation policy (versioned, snapshot) | READY — spec in implementation/tasks |

@@ -25,3 +25,4 @@
 - 2026-11-26: Owner approved Phase 2 (D-019) and verified-email-before-payment (D-018). Added TASK-P2-01 (catalog).
 - 2026-11-26: Added Phu Quoc demo catalog (PR #25). Owner approved D-020 (adapter + local simulators: Mock payment gateway, Mailpit; no plaintext secrets in admin settings). P2-06 unblocked.
 - 2026-11-26: P2-01 merged (PR #27) after R1 (published product could lose location) and R2 (geo cursor untested, mutation survived) were fixed. Added TASK-P2-02 spec (dated inventory).
+- 2026-11-27: P2-02 merged (PR #29), ACCEPTED WITH LIMITATIONS L1–L5; 4 extra reviewer mutations all killed. Added TASK-P2-03 spec (pricing, cancellation policy, refund function, L1 carry-over).
