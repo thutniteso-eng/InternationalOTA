@@ -19,6 +19,7 @@ export default tseslint.config(
       'packages/money/src/**/*.ts',
       'packages/i18n/src/format-money.ts',
       'apps/api/src/modules/finance/**/*.ts',
+      'apps/api/src/modules/pricing/**/*.ts',
     ],
     rules: {
       'no-restricted-globals': [

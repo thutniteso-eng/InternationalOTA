@@ -18,9 +18,12 @@ import {
   uuidv7,
 } from '@internationalota/db';
 import { isValidTimeZone } from '@internationalota/time';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { LocaleService } from '../../common/i18n/locale.service.js';
 import { DRIZZLE_DB } from '../../database/database.module.js';
+import type { InventoryDepartureCheckPort } from '../inventory/index.js';
+import type { PricingSummaryPort } from '../pricing/index.js';
 import { SupplyService } from '../supply/index.js';
 import {
   catalogImagesInvalidUrlException,
@@ -32,6 +35,7 @@ import {
   catalogPublishBlockedException,
   catalogSlugConflictException,
   catalogSupplierNotFoundException,
+  catalogTimeZoneLockedByDeparturesException,
 } from './catalog.errors.js';
 import type {
   AdminCatalogProductDto,
@@ -248,12 +252,34 @@ interface PublicQueryRow {
 }
 
 @Injectable()
-export class CatalogService {
+export class CatalogService implements OnModuleInit {
+  private inventoryService?: InventoryDepartureCheckPort;
+  private pricingService?: PricingSummaryPort;
+
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: DatabaseClient,
     private readonly supplyService: SupplyService,
     private readonly localeService: LocaleService,
+    private readonly moduleRef: ModuleRef,
   ) {}
+
+  onModuleInit(): void {
+    try {
+      this.inventoryService = this.moduleRef.get<InventoryDepartureCheckPort>(
+        'INVENTORY_DEPARTURE_CHECK_PORT',
+        { strict: false },
+      );
+    } catch {
+      // Optional when CatalogModule is booted standalone without InventoryModule
+    }
+    try {
+      this.pricingService = this.moduleRef.get<PricingSummaryPort>('PRICING_SUMMARY_PORT', {
+        strict: false,
+      });
+    } catch {
+      // Optional when CatalogModule is booted standalone without PricingModule
+    }
+  }
 
   private async assertCountryExists(rawAlpha2: string): Promise<string> {
     const code = typeof rawAlpha2 === 'string' ? rawAlpha2.trim().toUpperCase() : '';
@@ -461,7 +487,11 @@ export class CatalogService {
             missingTimeZone: true,
           });
         }
-        setValues['timeZone'] = this.assertTimeZone(rawTz as string);
+        const nextTz = this.assertTimeZone(rawTz as string);
+        if (nextTz !== existing.timeZone && (await this.inventoryService?.hasDepartures(id))) {
+          throw catalogTimeZoneLockedByDeparturesException();
+        }
+        setValues['timeZone'] = nextTz;
       }
       if (input.durationMinutes !== undefined) {
         if (input.durationMinutes === null) {
@@ -1145,6 +1175,10 @@ export class CatalogService {
       alt: pickLocalizedAlt(img.alt, locale),
     }));
 
+    const pricingSummary = this.pricingService
+      ? await this.pricingService.getPublicProductSummaryPricing(row.id, row.timeZone, locale)
+      : { fromPrice: null, cancellationSummary: null };
+
     return {
       id: row.id,
       kind: row.kind as ProductKind,
@@ -1166,6 +1200,8 @@ export class CatalogService {
       inclusions: row.inclusions,
       exclusions: row.exclusions,
       images,
+      fromPrice: pricingSummary.fromPrice,
+      cancellationSummary: pricingSummary.cancellationSummary,
     };
   }
 }

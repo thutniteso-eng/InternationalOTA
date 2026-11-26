@@ -39,6 +39,7 @@ import type {
   CancelDepartureResult,
   GenerateDeparturesInput,
   GenerateDeparturesResult,
+  InventoryDepartureQuoteTarget,
   PublicAvailabilityItem,
   PublicAvailabilityResponse,
   ReleaseInput,
@@ -698,5 +699,93 @@ export class InventoryService {
     });
 
     return { items };
+  }
+
+  /**
+   * Public inter-module API (L1 carry-over): true if the product has at least one departure.
+   */
+  async hasDepartures(productId: string): Promise<boolean> {
+    if (!UUID_REGEX.test(productId)) {
+      return false;
+    }
+    const [row] = await this.db
+      .select({ id: inventoryDepartures.id })
+      .from(inventoryDepartures)
+      .where(eq(inventoryDepartures.productId, productId))
+      .limit(1);
+    return row !== undefined;
+  }
+
+  /**
+   * Public inter-module API: returns departure metadata + DB-clock bookability for quoting.
+   */
+  async getDepartureQuoteTarget(
+    departureId: string,
+  ): Promise<InventoryDepartureQuoteTarget | null> {
+    if (!UUID_REGEX.test(departureId)) {
+      return null;
+    }
+    const res = await this.db.execute(sql`
+      SELECT
+        id,
+        product_id AS "productId",
+        local_date::text AS "localDate",
+        to_char(local_time, 'HH24:MI:SS') AS "localTime",
+        starts_at AS "startsAt",
+        capacity,
+        allocated,
+        status,
+        booking_cutoff_minutes AS "bookingCutoffMinutes",
+        (
+          status = 'open'
+          AND starts_at > now()
+          AND now() <= starts_at - make_interval(mins => booking_cutoff_minutes)
+        ) AS "isBookableNow"
+      FROM inventory.departures
+      WHERE id = ${departureId}::uuid
+      LIMIT 1
+    `);
+    const row = res.rows[0];
+    if (!row) {
+      return null;
+    }
+    return {
+      id: String(row['id']),
+      productId: String(row['productId']),
+      localDate: String(row['localDate']),
+      localTime: String(row['localTime']),
+      startsAt: toIsoTimestamp(row['startsAt']),
+      capacity: Number(row['capacity']),
+      allocated: Number(row['allocated']),
+      status: String(row['status']) as DepartureStatus,
+      bookingCutoffMinutes: Number(row['bookingCutoffMinutes']),
+      isBookableNow: row['isBookableNow'] === true,
+    };
+  }
+
+  /**
+   * Public inter-module API: distinct local dates of bookable open departures in the next `windowDays`
+   * evaluated against the product's IANA time zone using PostgreSQL now().
+   */
+  async getUpcomingOpenDepartureDates(
+    productId: string,
+    timeZone: string,
+    windowDays = MAX_PUBLIC_WINDOW_DAYS,
+  ): Promise<readonly string[]> {
+    if (!UUID_REGEX.test(productId)) {
+      return [];
+    }
+    const res = await this.db.execute(sql`
+      SELECT DISTINCT local_date::text AS "localDate"
+      FROM inventory.departures
+      WHERE product_id = ${productId}::uuid
+        AND status = 'open'
+        AND starts_at > now()
+        AND now() <= starts_at - make_interval(mins => booking_cutoff_minutes)
+        AND local_date >= (now() AT TIME ZONE ${timeZone})::date
+        AND local_date <= ((now() AT TIME ZONE ${timeZone})::date + ${windowDays}::int)
+      ORDER BY "localDate" ASC
+    `);
+    return res.rows.map((row) => String(row['localDate']));
   }
 }

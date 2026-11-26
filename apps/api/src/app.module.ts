@@ -10,6 +10,7 @@ import { IdempotencyModule } from './modules/idempotency/index.js';
 import { IdentityModule } from './modules/identity/index.js';
 import { InventoryModule } from './modules/inventory/index.js';
 import { MessagingModule } from './modules/messaging/index.js';
+import { PricingModule } from './modules/pricing/index.js';
 import { SupplyModule } from './modules/supply/index.js';
 
 @Module({
@@ -21,7 +22,8 @@ import { SupplyModule } from './modules/supply/index.js';
     MessagingModule,
     FinanceModule,
     SupplyModule,
-    // Registered before CatalogModule so /catalog/products/:productId/availability matches before :locale/:slug.
+    // Registered before CatalogModule so /catalog/products/:productId/{quote,availability} match before :locale/:slug.
+    PricingModule,
     InventoryModule,
     CatalogModule,
   ],

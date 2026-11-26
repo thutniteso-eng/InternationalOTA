@@ -106,3 +106,20 @@ export interface PublicAvailabilityItem {
 export interface PublicAvailabilityResponse {
   readonly items: readonly PublicAvailabilityItem[];
 }
+
+export interface InventoryDepartureQuoteTarget {
+  readonly id: string;
+  readonly productId: string;
+  readonly localDate: string;
+  readonly localTime: string;
+  readonly startsAt: string;
+  readonly capacity: number;
+  readonly allocated: number;
+  readonly status: DepartureStatus;
+  readonly bookingCutoffMinutes: number;
+  readonly isBookableNow: boolean;
+}
+
+export interface InventoryDepartureCheckPort {
+  hasDepartures(productId: string): Promise<boolean>;
+}

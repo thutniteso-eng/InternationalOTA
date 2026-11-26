@@ -8,7 +8,10 @@ import { InventoryService } from './inventory.service.js';
 @Module({
   imports: [IdentityModule, CatalogModule],
   controllers: [InventoryAdminController, InventoryPublicController],
-  providers: [InventoryService],
-  exports: [InventoryService],
+  providers: [
+    InventoryService,
+    { provide: 'INVENTORY_DEPARTURE_CHECK_PORT', useExisting: InventoryService },
+  ],
+  exports: [InventoryService, 'INVENTORY_DEPARTURE_CHECK_PORT'],
 })
 export class InventoryModule {}

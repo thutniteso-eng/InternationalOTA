@@ -20,6 +20,8 @@ export type {
   CancelDepartureResult,
   GenerateDeparturesInput,
   GenerateDeparturesResult,
+  InventoryDepartureCheckPort,
+  InventoryDepartureQuoteTarget,
   PublicAvailabilityItem,
   PublicAvailabilityResponse,
   PublicAvailabilityStatus,
