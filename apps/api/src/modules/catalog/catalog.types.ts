@@ -139,3 +139,16 @@ export interface PublicListProductsQuery {
   readonly cursor?: string;
   readonly limit?: string;
 }
+
+export interface CatalogInventoryTarget {
+  readonly id: string;
+  readonly kind: ProductKind;
+  readonly status: ProductStatus;
+  readonly timeZone: string;
+}
+
+export interface CatalogPublicVisibility {
+  readonly visible: boolean;
+  readonly kind: ProductKind | null;
+  readonly timeZone: string | null;
+}

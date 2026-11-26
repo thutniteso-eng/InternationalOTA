@@ -37,6 +37,8 @@ import type {
   AdminCatalogProductDto,
   AdminListProductsOptions,
   AdminProductListResponse,
+  CatalogInventoryTarget,
+  CatalogPublicVisibility,
   CreateProductInput,
   GeoPoint,
   ProductImageDto,
@@ -688,6 +690,64 @@ export class CatalogService {
         alt: img.alt,
       })),
     );
+  }
+
+  async getProductInventoryTarget(id: string): Promise<CatalogInventoryTarget | null> {
+    if (!UUID_REGEX.test(id)) {
+      return null;
+    }
+    const [row] = await this.db
+      .select({
+        id: catalogProducts.id,
+        kind: catalogProducts.kind,
+        status: catalogProducts.status,
+        timeZone: catalogProducts.timeZone,
+      })
+      .from(catalogProducts)
+      .where(eq(catalogProducts.id, id));
+
+    if (!row) {
+      return null;
+    }
+
+    return {
+      id: row.id,
+      kind: row.kind as ProductKind,
+      status: row.status as ProductStatus,
+      timeZone: row.timeZone,
+    };
+  }
+
+  async getPublicProductVisibility(id: string): Promise<CatalogPublicVisibility> {
+    if (!UUID_REGEX.test(id)) {
+      return { visible: false, kind: null, timeZone: null };
+    }
+    const [row] = await this.db
+      .select({
+        id: catalogProducts.id,
+        supplierId: catalogProducts.supplierId,
+        kind: catalogProducts.kind,
+        status: catalogProducts.status,
+        publishedAt: catalogProducts.publishedAt,
+        timeZone: catalogProducts.timeZone,
+      })
+      .from(catalogProducts)
+      .where(eq(catalogProducts.id, id));
+
+    if (!row || row.status !== 'published' || row.publishedAt === null) {
+      return { visible: false, kind: null, timeZone: null };
+    }
+
+    const supplierActive = await this.supplyService.isSupplierActive(row.supplierId);
+    if (!supplierActive) {
+      return { visible: false, kind: null, timeZone: null };
+    }
+
+    return {
+      visible: true,
+      kind: row.kind as ProductKind,
+      timeZone: row.timeZone,
+    };
   }
 
   async listAdminProducts(

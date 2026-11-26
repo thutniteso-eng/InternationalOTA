@@ -8,6 +8,7 @@ import { CatalogModule } from './modules/catalog/index.js';
 import { FinanceModule } from './modules/finance/index.js';
 import { IdempotencyModule } from './modules/idempotency/index.js';
 import { IdentityModule } from './modules/identity/index.js';
+import { InventoryModule } from './modules/inventory/index.js';
 import { MessagingModule } from './modules/messaging/index.js';
 import { SupplyModule } from './modules/supply/index.js';
 
@@ -20,6 +21,8 @@ import { SupplyModule } from './modules/supply/index.js';
     MessagingModule,
     FinanceModule,
     SupplyModule,
+    // Registered before CatalogModule so /catalog/products/:productId/availability matches before :locale/:slug.
+    InventoryModule,
     CatalogModule,
   ],
   controllers: [HealthController],

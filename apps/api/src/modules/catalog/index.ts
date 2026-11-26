@@ -15,6 +15,8 @@ export type {
   AdminCatalogProductDto,
   AdminListProductsOptions,
   AdminProductListResponse,
+  CatalogInventoryTarget,
+  CatalogPublicVisibility,
   CreateProductInput,
   GeoPoint,
   ProductImageDto,
