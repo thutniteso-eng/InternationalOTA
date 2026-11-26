@@ -44,7 +44,7 @@ P2-01 (catalog) and P2-02 (inventory) are merged.
   - Arithmetic only via `packages/money`; no JS `number` for amounts.
 - **`computeRefund({ rules, startsAt, cancelledAt, paidAmountMinor, currency })`**, pure:
   - The applicable rule is the one with the largest `hoursBeforeStart` such that `startsAt - cancelledAt >= hoursBeforeStart` hours. Cancelling after the start gives 0%.
-  - Amount: `roundFraction(paid × percent, 100, RoundingMode.FLOOR)`, i.e. rounding never favours the platform beyond one minor unit. Document this as the rule.
+  - Amount: `roundFraction(paid × percent, 100, RoundingMode.DOWN)` (amounts are non-negative, so DOWN = floor), i.e. rounding never favours the platform beyond one minor unit. Document this as the rule.
   - Returns `{ refundPercent, refundAmountMinor, ruleApplied }`.
 - **`isSameQuote(a, b)`**: compares `snapshotHash`. P2-04 uses it to require reconfirmation.
 
@@ -89,7 +89,7 @@ Booking/holds (P2-04), payments, taxes/fees breakdown and invoices, promotions/d
 9. **L1:** a time-zone change is rejected when departures exist and allowed when none exist.
 10. **Auth:** customer → 403 and anonymous → 401 on admin endpoints. Idempotent replay returns the same version, with no duplicate version created.
 11. **Mutation evidence** (each makes at least one test fail):
-    - (a) refund rounding `FLOOR` → `HALF_UP`;
+    - (a) refund rounding `DOWN` → `HALF_UP`;
     - (b) resolution picks the lowest version instead of the highest;
     - (c) dropping the immutability trigger;
     - (d) `seats` counting infants;
