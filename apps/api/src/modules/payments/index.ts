@@ -14,6 +14,7 @@ export { PaymentsModule } from './payments.module.js';
 export { PaymentsService } from './payments.service.js';
 export type {
   AdminRefundDto,
+  BookingCancellationPreviewDto,
   CreateCheckoutInput,
   CreateCheckoutOutput,
   CreateRefundInput,

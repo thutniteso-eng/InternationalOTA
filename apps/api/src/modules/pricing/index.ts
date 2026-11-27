@@ -30,6 +30,7 @@ export type {
   PriceListItemInput,
   PublicCancellationSummaryDto,
   PublicFromPriceDto,
+  PublicPaxAgeBandDto,
   PricingSummaryPort,
   PublicProductPricingSummary,
   PublicQuoteLineDto,
