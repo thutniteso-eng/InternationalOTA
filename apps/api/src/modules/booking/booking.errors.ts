@@ -106,3 +106,11 @@ export function bookingNotCancellableException(): ConflictException {
     errorCode: 'not_cancellable',
   });
 }
+
+export function bookingTooLateToCancelException(): ConflictException {
+  return new ConflictException({
+    message: 'This booking can no longer be cancelled because the departure has already started.',
+    i18nKey: 'booking.hold.tooLateToCancel',
+    errorCode: 'too_late_to_cancel',
+  });
+}

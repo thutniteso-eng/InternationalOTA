@@ -720,6 +720,35 @@ export class InventoryService {
   }
 
   /**
+   * Public inter-module API: returns departure startsAt together with PostgreSQL DB now().
+   */
+  async getDepartureStartsAtWithDbNow(
+    departureId: string,
+    tx?: InventoryDbRunner,
+  ): Promise<{ readonly startsAt: Date; readonly dbNow: Date } | null> {
+    if (!UUID_REGEX.test(departureId)) {
+      return null;
+    }
+    const runner = tx ?? this.db;
+    const res = await runner.execute(sql`
+      SELECT
+        starts_at AS "startsAt",
+        now() AS "dbNow"
+      FROM inventory.departures
+      WHERE id = ${departureId}::uuid
+      LIMIT 1
+    `);
+    const row = res.rows[0];
+    if (!row) {
+      return null;
+    }
+    return {
+      startsAt: new Date(toIsoTimestamp(row['startsAt'])),
+      dbNow: new Date(toIsoTimestamp(row['dbNow'])),
+    };
+  }
+
+  /**
    * Public inter-module API: returns departure metadata + DB-clock bookability for quoting.
    */
   async getDepartureQuoteTarget(

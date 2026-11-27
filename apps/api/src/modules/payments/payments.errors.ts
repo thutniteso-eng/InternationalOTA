@@ -46,3 +46,27 @@ export function mockTransactionNotFoundException(): NotFoundException {
     errorCode: 'not_found',
   });
 }
+
+export function paymentRefundNotFoundException(): NotFoundException {
+  return new NotFoundException({
+    message: 'Refund was not found.',
+    i18nKey: 'payments.refund.notFound',
+    errorCode: 'not_found',
+  });
+}
+
+export function paymentRefundNotRetryableException(): ConflictException {
+  return new ConflictException({
+    message: 'Refund can only be retried from manual_review status.',
+    i18nKey: 'payments.refund.notRetryable',
+    errorCode: 'refund_not_retryable',
+  });
+}
+
+export function departureCancelReasonRequiredException(): BadRequestException {
+  return new BadRequestException({
+    message: 'A non-empty cancellation reason is required.',
+    i18nKey: 'payments.departureCancel.reasonRequired',
+    errorCode: 'reason_required',
+  });
+}

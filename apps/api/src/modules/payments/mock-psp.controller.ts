@@ -22,6 +22,9 @@ const VALID_ACTIONS: ReadonlySet<string> = new Set([
   'duplicate',
   'delayed_3m',
   'wrong_amount',
+  'refund_auto_succeed',
+  'refund_auto_fail',
+  'refund_delay',
 ]);
 
 function resolveInternalCallbackUrl(req: Request): string {

@@ -78,6 +78,12 @@ export async function applyRuntimeRoleGrants(
     ),
   );
   await db.execute(
+    sql.raw(`GRANT SELECT, INSERT, UPDATE ON TABLE payments.refunds TO ${roleIdent};`),
+  );
+  await db.execute(
+    sql.raw(`GRANT SELECT, INSERT, UPDATE ON TABLE payments.mock_psp_refunds TO ${roleIdent};`),
+  );
+  await db.execute(
     sql.raw(`GRANT SELECT, INSERT, UPDATE ON TABLE finance.accounts TO ${roleIdent};`),
   );
   await db.execute(

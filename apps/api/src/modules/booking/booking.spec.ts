@@ -1224,11 +1224,44 @@ describe('Booking aggregate, state machine & expiring holds (P2-04)', () => {
     const confirmed = await bookingService.confirm(confHoldBody.id, 'pay-ac10-1');
     expect(confirmed.ok).toBe(true);
 
-    const cancelConfirmed = await fetch(`${baseUrl}/bookings/${confHoldBody.reference}/cancel`, {
+    // cancelBeforePayment rejects confirmed bookings (pre-payment cancel guard remains intact)
+    const cancelBeforePay = await bookingService.cancelBeforePayment(
+      confHoldBody.id,
+      confUser.userId,
+    );
+    expect(cancelBeforePay).toEqual({ ok: false, reason: 'not_cancellable' });
+
+    // Expired booking cannot be cancelled via HTTP -> 409
+    await fastForwardHoldExpiry(createdHold.id);
+    const expHoldRes = await fetch(`${baseUrl}/bookings`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: confUser.cookie,
+        'Idempotency-Key': nextIdemKey(),
+      },
+      body: JSON.stringify({
+        departureId,
+        pax: { adult: 1, child: 0, infant: 0 },
+        contact: {
+          name: 'Exp User',
+          email: 'exp@example.com',
+          phone: '+84900000041',
+          locale: 'en',
+        },
+        expectedSnapshotHash: quote.snapshotHash,
+      }),
+    });
+    expect(expHoldRes.status).toBe(201);
+    const expHoldBody = (await expHoldRes.json()) as HoldBookingResponseDto;
+    await fastForwardHoldExpiry(expHoldBody.id);
+    await bookingService.expireDue({ limit: 5 });
+
+    const cancelExpired = await fetch(`${baseUrl}/bookings/${expHoldBody.reference}/cancel`, {
       method: 'POST',
       headers: { Cookie: confUser.cookie, 'Idempotency-Key': nextIdemKey() },
     });
-    expect(cancelConfirmed.status).toBe(409);
+    expect(cancelExpired.status).toBe(409);
 
     // AC9: Anti-hoarding sequential + cancel recovery + concurrent 4-hold burst
     const hoardSeqUser = await signUpAndSignIn('ac9-seq@example.com', 'AC9 Seq', false, true);

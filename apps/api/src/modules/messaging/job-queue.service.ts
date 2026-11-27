@@ -14,10 +14,14 @@ import { InboxService } from './inbox.service.js';
 import {
   BOOKING_EXPIRY_WORKER_PORT,
   type BookingExpiryWorkerPort,
+  DEPARTURE_BOOKING_CANCEL_WORKER_PORT,
+  type DepartureBookingCancelWorkerPort,
   MOCK_PSP_DELAYED_CALLBACK_WORKER_PORT,
   type MockPspDelayedCallbackWorkerPort,
   PAYMENT_RECONCILIATION_WORKER_PORT,
   type PaymentReconciliationWorkerPort,
+  REFUND_EXECUTOR_WORKER_PORT,
+  type RefundExecutorWorkerPort,
 } from './messaging.types.js';
 import { OutboxService } from './outbox.service.js';
 
@@ -27,6 +31,8 @@ export const QUEUE_IDEMPOTENCY_CLEANUP = 'idempotency-keys-cleanup';
 export const QUEUE_BOOKING_EXPIRY = 'booking-hold-expiry';
 export const QUEUE_PAYMENT_RECONCILIATION = 'payment-reconciliation';
 export const QUEUE_MOCK_PSP_DELAYED_CALLBACK = 'mock-psp-delayed-callback';
+export const QUEUE_REFUND_EXECUTOR = 'refund-executor';
+export const QUEUE_DEPARTURE_BOOKING_CANCEL = 'departure-booking-cancel';
 
 const EXPIRY_WORKER_BATCH_LIMIT = 50;
 
@@ -42,6 +48,8 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
   private bookingExpiryWorker: BookingExpiryWorkerPort | null = null;
   private paymentReconciliationWorker: PaymentReconciliationWorkerPort | null = null;
   private mockDelayedCallbackWorker: MockPspDelayedCallbackWorkerPort | null = null;
+  private refundExecutorWorker: RefundExecutorWorkerPort | null = null;
+  private departureBookingCancelWorker: DepartureBookingCancelWorkerPort | null = null;
 
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: DatabaseClient,
@@ -85,6 +93,24 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
       this.mockDelayedCallbackWorker = null;
     }
 
+    try {
+      this.refundExecutorWorker = this.moduleRef.get<RefundExecutorWorkerPort>(
+        REFUND_EXECUTOR_WORKER_PORT,
+        { strict: false },
+      );
+    } catch {
+      this.refundExecutorWorker = null;
+    }
+
+    try {
+      this.departureBookingCancelWorker = this.moduleRef.get<DepartureBookingCancelWorkerPort>(
+        DEPARTURE_BOOKING_CANCEL_WORKER_PORT,
+        { strict: false },
+      );
+    } catch {
+      this.departureBookingCancelWorker = null;
+    }
+
     if (process.env['PG_BOSS_DISABLED'] === 'true') {
       return;
     }
@@ -126,6 +152,8 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
     await boss.createQueue(QUEUE_BOOKING_EXPIRY);
     await boss.createQueue(QUEUE_PAYMENT_RECONCILIATION);
     await boss.createQueue(QUEUE_MOCK_PSP_DELAYED_CALLBACK);
+    await boss.createQueue(QUEUE_REFUND_EXECUTOR);
+    await boss.createQueue(QUEUE_DEPARTURE_BOOKING_CANCEL);
 
     await boss.work(QUEUE_OUTBOX_RELAY, async () => {
       let processed = 0;
@@ -163,12 +191,30 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
       }
     });
 
+    await boss.work(QUEUE_REFUND_EXECUTOR, async () => {
+      if (!this.refundExecutorWorker) {
+        return;
+      }
+      await this.refundExecutorWorker.processDueRefunds();
+    });
+
+    await boss.work(QUEUE_DEPARTURE_BOOKING_CANCEL, async (jobs) => {
+      if (!this.departureBookingCancelWorker) {
+        return;
+      }
+      for (const job of jobs) {
+        const data = (job.data ?? {}) as Record<string, unknown>;
+        await this.departureBookingCancelWorker.executeDepartureBookingCancel(data);
+      }
+    });
+
     // Daily cleanup of expired platform.idempotency_keys rows
     await boss.schedule(QUEUE_IDEMPOTENCY_CLEANUP, '0 3 * * *');
     await boss.schedule(QUEUE_OUTBOX_RELAY, '* * * * *');
     await boss.schedule(QUEUE_INBOX_RELAY, '* * * * *');
     await boss.schedule(QUEUE_BOOKING_EXPIRY, '* * * * *');
     await boss.schedule(QUEUE_PAYMENT_RECONCILIATION, '*/5 * * * *');
+    await boss.schedule(QUEUE_REFUND_EXECUTOR, '* * * * *');
 
     this.logger.log(
       JSON.stringify({
@@ -240,13 +286,20 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
   async sendJob(
     queueName: string,
     data: Record<string, unknown> = {},
-    options?: { readonly startAfter?: number },
+    options?: { readonly startAfter?: number; readonly singletonKey?: string },
   ): Promise<string | null> {
     if (!this.boss || !this.started) {
       throw new Error('JobQueueService is not started');
     }
+    const sendOpts: { startAfter?: number; singletonKey?: string } = {};
     if (options?.startAfter !== undefined) {
-      return this.boss.send(queueName, data, { startAfter: options.startAfter });
+      sendOpts.startAfter = options.startAfter;
+    }
+    if (options?.singletonKey !== undefined) {
+      sendOpts.singletonKey = options.singletonKey;
+    }
+    if (Object.keys(sendOpts).length > 0) {
+      return this.boss.send(queueName, data, sendOpts);
     }
     return this.boss.send(queueName, data);
   }
@@ -256,6 +309,20 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
       return;
     }
     void this.boss.send(QUEUE_INBOX_RELAY, {}).catch(() => undefined);
+  }
+
+  triggerOutboxRelayAsync(): void {
+    if (!this.boss || !this.started) {
+      return;
+    }
+    void this.boss.send(QUEUE_OUTBOX_RELAY, {}).catch(() => undefined);
+  }
+
+  triggerRefundExecutorAsync(): void {
+    if (!this.boss || !this.started) {
+      return;
+    }
+    void this.boss.send(QUEUE_REFUND_EXECUTOR, {}).catch(() => undefined);
   }
 
   async runPaymentReconciliationBatch(): Promise<{

@@ -1222,6 +1222,7 @@ describe('Checkout saga & Mock PSP adapter (P2-05)', () => {
       webhookSlug: 'mock-psp',
       getConfigSnapshot: () => ({ provider: 'mock', mode: 'failing', version: 1 }),
       createCheckout: () => Promise.reject(new Error('Simulated PSP outage')),
+      refund: (input) => mockProvider.refund(input),
       verify: (rawBody, headers) => mockProvider.verify(rawBody, headers),
       verifyWebhook: (rawBody, headers) => mockProvider.verifyWebhook(rawBody, headers),
       getStatus: (ref) => mockProvider.getStatus(ref),
