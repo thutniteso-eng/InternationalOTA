@@ -18,7 +18,13 @@ import {
   uuidv7,
 } from '@internationalota/db';
 import { isValidTimeZone } from '@internationalota/time';
-import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  type OnModuleInit,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { LocaleService } from '../../common/i18n/locale.service.js';
 import { DRIZZLE_DB } from '../../database/database.module.js';
@@ -253,6 +259,7 @@ interface PublicQueryRow {
 
 @Injectable()
 export class CatalogService implements OnModuleInit {
+  private readonly logger = new Logger(CatalogService.name);
   private inventoryService?: InventoryDepartureCheckPort;
   private pricingService?: PricingSummaryPort;
 
@@ -269,15 +276,19 @@ export class CatalogService implements OnModuleInit {
         'INVENTORY_DEPARTURE_CHECK_PORT',
         { strict: false },
       );
-    } catch {
-      // Optional when CatalogModule is booted standalone without InventoryModule
+    } catch (err) {
+      this.logger.warn(
+        `INVENTORY_DEPARTURE_CHECK_PORT is not bound; timeZone updates will fail closed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
     try {
       this.pricingService = this.moduleRef.get<PricingSummaryPort>('PRICING_SUMMARY_PORT', {
         strict: false,
       });
-    } catch {
-      // Optional when CatalogModule is booted standalone without PricingModule
+    } catch (err) {
+      this.logger.warn(
+        `PRICING_SUMMARY_PORT is not bound; product detail pricing summary will degrade to null: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -488,8 +499,21 @@ export class CatalogService implements OnModuleInit {
           });
         }
         const nextTz = this.assertTimeZone(rawTz as string);
-        if (nextTz !== existing.timeZone && (await this.inventoryService?.hasDepartures(id))) {
-          throw catalogTimeZoneLockedByDeparturesException();
+        if (nextTz !== existing.timeZone) {
+          if (!this.inventoryService) {
+            this.logger.error(
+              `Refusing timeZone change on product ${id}: INVENTORY_DEPARTURE_CHECK_PORT is unavailable`,
+            );
+            throw new ServiceUnavailableException({
+              message:
+                'Inventory departure verification service is unavailable; timeZone change refused.',
+              i18nKey: 'http.503.title',
+              errorCode: 'catalog.product.inventoryCheckUnavailable',
+            });
+          }
+          if (await this.inventoryService.hasDepartures(id, tx)) {
+            throw catalogTimeZoneLockedByDeparturesException();
+          }
         }
         setValues['timeZone'] = nextTz;
       }
@@ -722,11 +746,15 @@ export class CatalogService implements OnModuleInit {
     );
   }
 
-  async getProductInventoryTarget(id: string): Promise<CatalogInventoryTarget | null> {
+  async getProductInventoryTarget(
+    id: string,
+    tx?: Pick<DatabaseClient, 'select'>,
+  ): Promise<CatalogInventoryTarget | null> {
     if (!UUID_REGEX.test(id)) {
       return null;
     }
-    const [row] = await this.db
+    const runner = tx ?? this.db;
+    const baseQuery = runner
       .select({
         id: catalogProducts.id,
         kind: catalogProducts.kind,
@@ -735,6 +763,8 @@ export class CatalogService implements OnModuleInit {
       })
       .from(catalogProducts)
       .where(eq(catalogProducts.id, id));
+
+    const [row] = tx ? await baseQuery.for('share') : await baseQuery;
 
     if (!row) {
       return null;

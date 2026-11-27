@@ -343,14 +343,6 @@ export class InventoryService {
       throw inventoryInvalidQueryException('body productId must match route productId');
     }
 
-    const product = await this.catalogService.getProductInventoryTarget(productId);
-    if (!product) {
-      throw catalogProductNotFoundException();
-    }
-    if (product.kind !== 'tour' && product.kind !== 'activity') {
-      throw inventoryUnsupportedProductKindException(product.kind);
-    }
-
     const { fromDate, toDate } = parseDateWindow(input.fromDate, input.toDate, MAX_GENERATE_DAYS);
 
     const rawWeekdays: unknown = input.weekdays;
@@ -393,11 +385,21 @@ export class InventoryService {
       current = addDays(current, 1);
     }
 
-    if (candidates.length === 0) {
-      return { createdCount: 0, skippedCount: 0, createdIds: [] };
-    }
-
     return this.db.transaction(async (tx) => {
+      // Lock catalog.products row with FOR SHARE inside our transaction so concurrent
+      // updateProduct(timeZone) (FOR UPDATE) serializes cleanly with timeZone reading.
+      const product = await this.catalogService.getProductInventoryTarget(productId, tx);
+      if (!product) {
+        throw catalogProductNotFoundException();
+      }
+      if (product.kind !== 'tour' && product.kind !== 'activity') {
+        throw inventoryUnsupportedProductKindException(product.kind);
+      }
+
+      if (candidates.length === 0) {
+        return { createdCount: 0, skippedCount: 0, createdIds: [] };
+      }
+
       // Compute starts_at inside PostgreSQL using AT TIME ZONE so DST and IANA rules come
       // strictly from PostgreSQL's tzdata. Round-trip back to detect non-existent local times.
       const resolvedRes = await tx.execute(sql`
@@ -704,11 +706,12 @@ export class InventoryService {
   /**
    * Public inter-module API (L1 carry-over): true if the product has at least one departure.
    */
-  async hasDepartures(productId: string): Promise<boolean> {
+  async hasDepartures(productId: string, tx?: Pick<DatabaseClient, 'select'>): Promise<boolean> {
     if (!UUID_REGEX.test(productId)) {
       return false;
     }
-    const [row] = await this.db
+    const runner = tx ?? this.db;
+    const [row] = await runner
       .select({ id: inventoryDepartures.id })
       .from(inventoryDepartures)
       .where(eq(inventoryDepartures.productId, productId))

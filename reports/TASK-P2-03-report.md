@@ -108,3 +108,43 @@ HTTP_STATUS:404
 - `pnpm test`: passed (`apps/api`: 13 files / 100 tests passed; `tools`: 1 file / 16 tests passed; all workspace packages + `apps/web` passed)
 - `pnpm licenses:check`: passed (`All 471 package licenses verified successfully`)
 - `pnpm audit --prod --audit-level high`: passed (exit 0)
+
+## Corrections (R1–R3)
+
+Addressed PR #31 review feedback (`R1`, `R2`, `R3`) on `task/P2-03-pricing`:
+
+- **R1 (Price list item immutability + deferred adult item enforcement):**
+  - Added `createdTxid` (`created_txid bigint NOT NULL DEFAULT txid_current()`) to `pricingPriceLists` in `packages/db/src/schema/pricing.ts` and forward-only migration `packages/db/migrations/0012_flippant_thunderbolts.sql`.
+  - Added `pricing.trg_fn_price_list_items_same_tx()` and `BEFORE INSERT ON pricing.price_list_items` trigger `trg_price_list_items_same_tx` (`ERRCODE = 'restrict_violation'`, SQLSTATE `23001`) requiring `created_txid = txid_current()`.
+  - Added `pricing.trg_fn_price_lists_require_adult()` and `CONSTRAINT TRIGGER trg_price_lists_require_adult AFTER INSERT ON pricing.price_lists DEFERRABLE INITIALLY DEFERRED` (`ERRCODE = 'check_violation'`, SQLSTATE `23514`) rejecting commits without an `'adult'` row in `pricing.price_list_items`.
+- **R2 (L1 `timeZone` lock fail-closed when `INVENTORY_DEPARTURE_CHECK_PORT` is unbound):**
+  - `CatalogService.onModuleInit()` now logs warnings via Nest `Logger` when `INVENTORY_DEPARTURE_CHECK_PORT` or `PRICING_SUMMARY_PORT` is missing from `ModuleRef` (while leaving `PRICING_SUMMARY_PORT` optional so pricing summaries degrade to `null`).
+  - `CatalogService.updateProduct()` now logs an error and throws `ServiceUnavailableException` (`503`, `catalog.product.inventoryCheckUnavailable`) when a `timeZone` change is requested without `INVENTORY_DEPARTURE_CHECK_PORT` bound.
+- **R3 (Serialize `timeZone` update and departure generation under `FOR UPDATE` / `FOR SHARE`):**
+  - `CatalogService.getProductInventoryTarget(id, tx?)` accepts an optional transaction handle and locks the `catalog.products` row `FOR SHARE` when provided; `InventoryService.generateDepartures()` invokes it inside `this.db.transaction(...)`.
+  - `InventoryDepartureCheckPort.hasDepartures(productId, tx?)` and `InventoryService.hasDepartures(productId, tx?)` accept the caller's transaction so `CatalogService.updateProduct()` executes the departure existence check within its `FOR UPDATE` transaction.
+
+### R1–R3 Verification & Mutation Proof
+Filtered test execution (`src/modules/pricing/pricing.spec.ts -t "R1|R2|R3"`):
+```text
+ ✓ src/modules/pricing/pricing.spec.ts (13 tests | 10 skipped) 2223ms
+     ✓ R1: price_list_items reject late-transaction appends (23001) and price_lists require adult item at commit (23514) 149ms
+     ✓ R2: CatalogService fails closed (503) when INVENTORY_DEPARTURE_CHECK_PORT is unbound and a timeZone change is requested 139ms
+     ✓ R3: concurrent timeZone change and departure generation serialize under FOR UPDATE / FOR SHARE  571ms
+```
+
+R1 mutation check (temporarily removing `CREATE TRIGGER "trg_price_list_items_same_tx"` from `0012_flippant_thunderbolts.sql` before restoring it):
+```text
+ × R1: price_list_items reject late-transaction appends (23001) and price_lists require adult item at commit (23514) 170ms
+ FAIL  src/modules/pricing/pricing.spec.ts > Pricing & Cancellation Policy integration tests (P2-03) > R1: price_list_items reject late-transaction appends (23001) and price_lists require adult item at commit (23514)
+AssertionError: expected undefined to be '23001' // Object.is equality
+```
+
+Post-correction monorepo suite verification:
+- `pnpm format:check && pnpm lint && pnpm lint:boundaries && pnpm typecheck && pnpm build`: all passed (`120 modules, 458 dependencies cruised`, 0 violations)
+- `node -e "import('./apps/api/dist/app.module.js').then(() => console.log('COMPILED_ESM_LOAD_OK'))"`: `COMPILED_ESM_LOAD_OK`
+- `pnpm db:generate`: `No schema changes, nothing to migrate` (26 tables)
+- `pnpm test`: `apps/api` `13` files / `103` tests passed; `tools` `1` file / `16` tests passed; all workspace package suites passed
+- `pnpm licenses:check`: `All 471 package licenses verified successfully`
+- `pnpm audit --prod --audit-level high`: exit 0
+

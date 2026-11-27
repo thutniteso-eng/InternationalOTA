@@ -1,4 +1,4 @@
-import type { AllocationState, DepartureStatus } from '@internationalota/db';
+import type { AllocationState, DatabaseClient, DepartureStatus } from '@internationalota/db';
 
 export type AllocationOutcomeStatus =
   'allocated' | 'sold_out' | 'closed' | 'cutoff_passed' | 'not_found';
@@ -121,5 +121,5 @@ export interface InventoryDepartureQuoteTarget {
 }
 
 export interface InventoryDepartureCheckPort {
-  hasDepartures(productId: string): Promise<boolean>;
+  hasDepartures(productId: string, tx?: Pick<DatabaseClient, 'select'>): Promise<boolean>;
 }

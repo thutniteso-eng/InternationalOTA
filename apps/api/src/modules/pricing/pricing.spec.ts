@@ -5,16 +5,24 @@ import {
   grantRoleByEmail,
   seedReferenceData,
 } from '@internationalota/db';
-import type { INestApplication } from '@nestjs/common';
+import { type INestApplication, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestDatabase, type TestDbInstance } from '../../../test/test-db.js';
 import { AppModule } from '../../app.module.js';
 import { configureApp } from '../../app.setup.js';
-import { DRIZZLE_DB } from '../../database/database.module.js';
-import type { AdminCatalogProductDto, PublicCatalogProductDetail } from '../catalog/index.js';
+import { I18nModule } from '../../common/i18n/i18n.module.js';
+import { DatabaseModule, DRIZZLE_DB } from '../../database/database.module.js';
+import {
+  type AdminCatalogProductDto,
+  CatalogModule,
+  CatalogService,
+  type PublicCatalogProductDetail,
+} from '../catalog/index.js';
+import { IdempotencyModule } from '../idempotency/index.js';
+import { IdentityModule } from '../identity/index.js';
 import { type GenerateDeparturesResult, InventoryService } from '../inventory/index.js';
-import type { SupplierRecord } from '../supply/index.js';
+import { type SupplierRecord, SupplyModule } from '../supply/index.js';
 import { computeRefund, isSameQuote } from './pricing.refund.js';
 import { PricingService } from './pricing.service.js';
 import type {
@@ -36,6 +44,21 @@ function futureUtcDateString(daysAhead: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
+function createStartBarrier(parties: number) {
+  let arrived = 0;
+  let releaseAll!: () => void;
+  const gate = new Promise<void>((res) => {
+    releaseAll = res;
+  });
+  return async () => {
+    arrived++;
+    if (arrived === parties) {
+      releaseAll();
+    }
+    await gate;
+  };
+}
+
 describe('Pricing & Cancellation Policy integration tests (P2-03)', () => {
   let app: INestApplication;
   let baseUrl: string;
@@ -43,6 +66,7 @@ describe('Pricing & Cancellation Policy integration tests (P2-03)', () => {
   let testDb: TestDbInstance;
   let pricingService: PricingService;
   let inventoryService: InventoryService;
+  let catalogService: CatalogService;
 
   let adminCookie: string;
   let customerCookie: string;
@@ -236,6 +260,7 @@ describe('Pricing & Cancellation Policy integration tests (P2-03)', () => {
     db = moduleFixture.get<DatabaseClient>(DRIZZLE_DB);
     pricingService = moduleFixture.get(PricingService);
     inventoryService = moduleFixture.get(InventoryService);
+    catalogService = moduleFixture.get(CatalogService);
 
     adminCookie = await signUpAndSignIn(
       'pricing-admin@example.com',
@@ -887,5 +912,221 @@ describe('Pricing & Cancellation Policy integration tests (P2-03)', () => {
     });
     const listJson = (await listAll.json()) as { items: AdminPriceListDto[] };
     expect(listJson.items).toHaveLength(1);
+  });
+
+  it('R1: price_list_items reject late-transaction appends (23001) and price_lists require adult item at commit (23514)', async () => {
+    const tour = await createPublishedTour({
+      namePrefix: 'R1 Trigger Guard',
+      slugSuffix: 'r1-trigger-guard',
+    });
+
+    const v1 = await adminPost<AdminPriceListDto>(
+      `/admin/pricing/products/${tour.productId}/price-lists`,
+      {
+        currency: 'VND',
+        validFrom: '2027-01-01',
+        items: [{ paxType: 'adult', amountMinor: '600000', minAge: 12, occupiesSeat: true }],
+      },
+    );
+    expect(v1.status).toBe(201);
+
+    const lateClient = await testDb.pool.connect();
+    try {
+      await lateClient.query('BEGIN');
+      let lateCode: string | undefined;
+      try {
+        await lateClient.query(
+          `INSERT INTO pricing.price_list_items (price_list_id, pax_type, amount_minor, min_age, max_age, occupies_seat)
+           VALUES ($1, 'child', 300000, 2, 11, true)`,
+          [v1.body.id],
+        );
+      } catch (err) {
+        lateCode = (err as { code?: string }).code;
+      }
+      await lateClient.query('ROLLBACK');
+      expect(lateCode).toBe('23001');
+    } finally {
+      lateClient.release();
+    }
+
+    const noAdultClient = await testDb.pool.connect();
+    try {
+      await noAdultClient.query('BEGIN');
+      const orphanListId = randomUUID();
+      await noAdultClient.query(
+        `INSERT INTO pricing.price_lists (id, product_id, version, currency, valid_from, valid_to, created_by)
+         VALUES ($1, $2, 99, 'VND', '2028-01-01', NULL, 'r1-test-user')`,
+        [orphanListId, tour.productId],
+      );
+      await noAdultClient.query(
+        `INSERT INTO pricing.price_list_items (price_list_id, pax_type, amount_minor, min_age, max_age, occupies_seat)
+         VALUES ($1, 'child', 250000, 2, 11, true)`,
+        [orphanListId],
+      );
+      let commitCode: string | undefined;
+      try {
+        await noAdultClient.query('COMMIT');
+      } catch (err) {
+        commitCode = (err as { code?: string }).code;
+        await noAdultClient.query('ROLLBACK');
+      }
+      expect(commitCode).toBe('23514');
+    } finally {
+      noAdultClient.release();
+    }
+  });
+
+  it('R2: CatalogService fails closed (503) when INVENTORY_DEPARTURE_CHECK_PORT is unbound and a timeZone change is requested', async () => {
+    const tour = await createPublishedTour({
+      namePrefix: 'R2 Fail Closed',
+      slugSuffix: 'r2-fail-closed',
+    });
+
+    const warnSpy = vi.spyOn(Logger.prototype, 'warn');
+    const errorSpy = vi.spyOn(Logger.prototype, 'error');
+    const isolatedModule = await Test.createTestingModule({
+      imports: [
+        DatabaseModule,
+        I18nModule,
+        IdempotencyModule,
+        IdentityModule,
+        SupplyModule,
+        CatalogModule,
+      ],
+    }).compile();
+
+    try {
+      await isolatedModule.init();
+      const isolatedCatalog = isolatedModule.get(CatalogService);
+
+      expect(
+        warnSpy.mock.calls.some((call) =>
+          String(call[0]).includes('INVENTORY_DEPARTURE_CHECK_PORT'),
+        ),
+      ).toBe(true);
+
+      await expect(
+        isolatedCatalog.updateProduct(tour.productId, { timeZone: 'Asia/Bangkok' }),
+      ).rejects.toThrow(ServiceUnavailableException);
+
+      expect(
+        errorSpy.mock.calls.some((call) =>
+          String(call[0]).includes('INVENTORY_DEPARTURE_CHECK_PORT'),
+        ),
+      ).toBe(true);
+
+      const dbRow = await testDb.pool.query<{ time_zone: string }>(
+        'SELECT time_zone FROM catalog.products WHERE id = $1',
+        [tour.productId],
+      );
+      expect(dbRow.rows[0]?.time_zone).toBe('Asia/Ho_Chi_Minh');
+
+      // Non-timeZone edits remain operational while the port is unbound
+      const unchangedTz = await isolatedCatalog.updateProduct(tour.productId, {
+        region: 'Hạ Long',
+      });
+      expect(unchangedTz.region).toBe('Hạ Long');
+      expect(unchangedTz.timeZone).toBe('Asia/Ho_Chi_Minh');
+    } finally {
+      warnSpy.mockRestore();
+      errorSpy.mockRestore();
+      await isolatedModule.close();
+    }
+  });
+
+  it('R3: concurrent timeZone change and departure generation serialize under FOR UPDATE / FOR SHARE', async () => {
+    // 1. Concurrent 2-connection barrier races
+    for (let round = 0; round < 5; round++) {
+      const tour = await createPublishedTour({
+        namePrefix: `R3 Barrier ${round}`,
+        slugSuffix: `r3-barrier-${round}`,
+      });
+      const barrier = createStartBarrier(2);
+
+      const updateTask = (async () => {
+        await barrier();
+        return catalogService.updateProduct(tour.productId, { timeZone: 'Asia/Tokyo' });
+      })();
+
+      const generateTask = (async () => {
+        await barrier();
+        return inventoryService.generateDepartures(tour.productId, {
+          fromDate: '2027-06-15',
+          toDate: '2027-06-15',
+          weekdays: [1, 2, 3, 4, 5, 6, 7],
+          localTimes: ['09:00'],
+          capacity: 15,
+        });
+      })();
+
+      const [updateResult, generateResult] = await Promise.allSettled([updateTask, generateTask]);
+      expect(generateResult.status).toBe('fulfilled');
+
+      const prodRes = await testDb.pool.query<{ time_zone: string }>(
+        'SELECT time_zone FROM catalog.products WHERE id = $1',
+        [tour.productId],
+      );
+      const depRes = await testDb.pool.query<{ starts_at: Date }>(
+        'SELECT starts_at FROM inventory.departures WHERE product_id = $1',
+        [tour.productId],
+      );
+      expect(depRes.rows).toHaveLength(1);
+      const actualUtc = depRes.rows[0]!.starts_at.toISOString();
+
+      if (updateResult.status === 'fulfilled') {
+        // Update committed first: final timeZone is Asia/Tokyo (+09:00) -> 09:00 local = 00:00Z
+        expect(prodRes.rows[0]?.time_zone).toBe('Asia/Tokyo');
+        expect(actualUtc).toBe('2027-06-15T00:00:00.000Z');
+      } else {
+        // Generate committed first: final timeZone stays Asia/Ho_Chi_Minh (+07:00) -> 09:00 local = 02:00Z
+        expect(prodRes.rows[0]?.time_zone).toBe('Asia/Ho_Chi_Minh');
+        expect(actualUtc).toBe('2027-06-15T02:00:00.000Z');
+      }
+    }
+
+    // 2. Deterministic lock-order interleaving: connection A locks product FOR UPDATE & updates to Asia/Tokyo,
+    // connection B starts generateDepartures (FOR SHARE blocks until A commits) and must compute starts_at in Asia/Tokyo
+    const lockTour = await createPublishedTour({
+      namePrefix: 'R3 Lock Order',
+      slugSuffix: 'r3-lock-order',
+    });
+    const lockConn = await testDb.pool.connect();
+    let committedA = false;
+    try {
+      await lockConn.query('BEGIN');
+      await lockConn.query('SELECT id FROM catalog.products WHERE id = $1 FOR UPDATE', [
+        lockTour.productId,
+      ]);
+      await lockConn.query("UPDATE catalog.products SET time_zone = 'Asia/Tokyo' WHERE id = $1", [
+        lockTour.productId,
+      ]);
+
+      const genPromise = inventoryService
+        .generateDepartures(lockTour.productId, {
+          fromDate: '2027-06-15',
+          toDate: '2027-06-15',
+          weekdays: [1, 2, 3, 4, 5, 6, 7],
+          localTimes: ['09:00'],
+          capacity: 10,
+        })
+        .then((res) => ({ res, sawCommit: committedA }));
+
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      expect(committedA).toBe(false);
+      committedA = true;
+      await lockConn.query('COMMIT');
+
+      const genOutcome = await genPromise;
+      expect(genOutcome.sawCommit).toBe(true);
+      expect(genOutcome.res.createdCount).toBe(1);
+
+      const depRes = await testDb.pool.query<{ starts_at: Date }>(
+        'SELECT starts_at FROM inventory.departures WHERE product_id = $1',
+        [lockTour.productId],
+      );
+      expect(depRes.rows[0]?.starts_at.toISOString()).toBe('2027-06-15T00:00:00.000Z');
+    } finally {
+      lockConn.release();
+    }
   });
 });

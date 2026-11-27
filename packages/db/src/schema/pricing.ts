@@ -44,6 +44,9 @@ export const pricingPriceLists = pricingSchema.table(
     validFrom: date('valid_from', { mode: 'string' }).notNull(),
     validTo: date('valid_to', { mode: 'string' }),
     createdBy: text('created_by').notNull(),
+    createdTxid: bigint('created_txid', { mode: 'bigint' })
+      .notNull()
+      .default(sql`txid_current()`),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
