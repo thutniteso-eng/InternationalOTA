@@ -41,4 +41,8 @@ D-018: verified email required before payment. D-020: external integrations via 
 | P2-07 Cancellation & refunds (Mock) | MERGED #40 |
 | P2-08 Email notifications (SMTP + Mailpit, D-023) | MERGED #43 (N4 at-least-once on crash window) |
 | P2-09 Booking web — Demo 2 (+U2–U4) | MERGED #45 — Demo 2 live on staging |
-| H-1 Hygiene: F1, N3, U5, U6 | READY — spec in implementation/tasks |
+| H-1 Hygiene: F1, N3, U5, U6 | PR #47 REJECTED (R1: booking keyset cursor ms precision) — PAUSED |
+
+
+## Pause (2026-11-28 00:10 ICT)
+Project paused by Owner: Antigravity ran out of AI credits mid-task. Open: PR #47 (H-1) needs R1 fix (use DB microsecond timestamp text for booking list cursors, customer + admin; test with 5 bookings sharing created_at). Then P2-10 (admin + daily reconciliation), P2-11 (failure suite). Pending Owner: D-004 merchant model / legal advice.
