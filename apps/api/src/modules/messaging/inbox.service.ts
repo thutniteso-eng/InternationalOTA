@@ -42,6 +42,7 @@ const DEFAULT_BASE_BACKOFF_MS = 1000;
 export class InboxService {
   private readonly logger = new Logger(InboxService.name);
   private readonly verifiers = new Map<string, WebhookVerifier>();
+  private readonly verifierAliases = new Map<string, string>();
   private readonly handlers = new Map<string, InboxMessageHandler>();
   private readonly inFlight = new Set<Promise<unknown>>();
   private shuttingDown = false;
@@ -59,6 +60,10 @@ export class InboxService {
 
   registerVerifier(verifier: WebhookVerifier): void {
     this.verifiers.set(verifier.provider, verifier);
+  }
+
+  registerVerifierAlias(webhookSlug: string, canonicalProvider: string): void {
+    this.verifierAliases.set(webhookSlug, canonicalProvider);
   }
 
   registerHandler(provider: string, handler: InboxMessageHandler): void {
@@ -89,16 +94,17 @@ export class InboxService {
   }
 
   async receiveWebhook(
-    provider: string,
+    rawProvider: string,
     rawBody: Buffer,
     headers: IncomingHttpHeaders,
-  ): Promise<{ accepted: true; duplicate: boolean; eventId: string }> {
+  ): Promise<{ accepted: true; duplicate: boolean; eventId: string; provider: string }> {
+    const provider = this.verifierAliases.get(rawProvider) ?? rawProvider;
     const verifier = this.verifiers.get(provider);
     if (!verifier) {
       throw new NotFoundException({
-        message: `Unknown webhook provider: ${provider}`,
+        message: `Unknown webhook provider: ${rawProvider}`,
         i18nKey: 'http.404.unknownWebhookProvider',
-        i18nParams: { provider },
+        i18nParams: { provider: rawProvider },
       });
     }
 
@@ -139,7 +145,7 @@ export class InboxService {
       }),
     );
 
-    return { accepted: true, duplicate, eventId: verified.eventId };
+    return { accepted: true, duplicate, eventId: verified.eventId, provider };
   }
 
   async relayBatch(options: InboxRelayOptions = {}): Promise<number> {
@@ -172,7 +178,7 @@ export class InboxService {
           if (!handler) {
             throw new Error(`No handler registered for webhook provider "${message.provider}"`);
           }
-          await handler(message);
+          await tx.transaction(async (savepointTx) => handler(message, savepointTx));
 
           await tx
             .update(inboxMessages)

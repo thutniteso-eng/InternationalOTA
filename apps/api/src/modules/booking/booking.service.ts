@@ -21,8 +21,11 @@ import {
   Inject,
   Injectable,
   Logger,
+  type OnModuleInit,
+  Optional,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { LocaleService } from '../../common/i18n/locale.service.js';
 import { DRIZZLE_DB } from '../../database/database.module.js';
 import { IdentityService } from '../identity/index.js';
@@ -50,18 +53,21 @@ import {
   bookingValidationException,
 } from './booking.errors.js';
 import { generateBookingReference, normalizeBookingReference } from './booking.reference.js';
-import type {
-  AdminBookingListQuery,
-  BookingDetailDto,
-  BookingEventDto,
-  BookingExpiryResult,
-  CancelBookingResult,
-  ConfirmBookingResult,
-  CreateHoldInput,
-  CreateHoldResult,
-  CustomerBookingListResponse,
-  HoldBookingResponseDto,
-  MarkPaymentPendingResult,
+import {
+  BOOKING_PAYMENT_SUMMARY_PORT,
+  type AdminBookingListQuery,
+  type BookingDetailDto,
+  type BookingEventDto,
+  type BookingExpiryResult,
+  type BookingPaymentSummaryDto,
+  type BookingPaymentSummaryPort,
+  type CancelBookingResult,
+  type ConfirmBookingResult,
+  type CreateHoldInput,
+  type CreateHoldResult,
+  type CustomerBookingListResponse,
+  type HoldBookingResponseDto,
+  type MarkPaymentPendingResult,
 } from './booking.types.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -216,6 +222,7 @@ function toBookingEventDto(row: BookingEventRow): BookingEventDto {
 function toBookingDetailDto(
   row: BookingRow,
   events?: readonly BookingEventDto[],
+  payment?: BookingPaymentSummaryDto,
 ): BookingDetailDto {
   return {
     id: row.id,
@@ -243,6 +250,7 @@ function toBookingDetailDto(
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     ...(events !== undefined ? { events } : {}),
+    ...(payment !== undefined ? { payment } : {}),
   };
 }
 
@@ -257,9 +265,10 @@ type InternalTransitionOutcome =
     };
 
 @Injectable()
-export class BookingService implements BookingExpiryWorkerPort {
+export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
   private readonly logger = new Logger(BookingService.name);
   readonly holdMinutes: number;
+  private paymentSummaryPort: BookingPaymentSummaryPort | null = null;
 
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: DatabaseClient,
@@ -268,8 +277,33 @@ export class BookingService implements BookingExpiryWorkerPort {
     private readonly outboxService: OutboxService,
     private readonly identityService: IdentityService,
     private readonly localeService: LocaleService,
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {
     this.holdMinutes = parseBookingHoldMinutes();
+  }
+
+  onModuleInit(): void {
+    if (!this.moduleRef) {
+      return;
+    }
+    try {
+      this.paymentSummaryPort = this.moduleRef.get<BookingPaymentSummaryPort>(
+        BOOKING_PAYMENT_SUMMARY_PORT,
+        { strict: false },
+      );
+    } catch {
+      this.paymentSummaryPort = null;
+    }
+  }
+
+  private withTx<T>(
+    tx: DatabaseTransaction | undefined,
+    fn: (activeTx: DatabaseTransaction) => Promise<T>,
+  ): Promise<T> {
+    if (tx) {
+      return fn(tx);
+    }
+    return this.db.transaction(fn);
   }
 
   /**
@@ -640,13 +674,18 @@ export class BookingService implements BookingExpiryWorkerPort {
   async markPaymentPending(
     bookingId: string,
     customerUserId: string,
-    options?: { readonly actor?: string; readonly expectedVersion?: number },
+    options?: {
+      readonly actor?: string;
+      readonly expectedVersion?: number;
+      readonly tx?: DatabaseTransaction;
+    },
   ): Promise<MarkPaymentPendingResult> {
     if (!UUID_REGEX.test(bookingId)) {
       return { ok: false, reason: 'not_found' };
     }
 
-    const [existing] = await this.db
+    const executor = options?.tx ?? this.db;
+    const [existing] = await executor
       .select({ id: bookingBookings.id, customerUserId: bookingBookings.customerUserId })
       .from(bookingBookings)
       .where(eq(bookingBookings.id, bookingId))
@@ -664,7 +703,7 @@ export class BookingService implements BookingExpiryWorkerPort {
 
     const actor = options?.actor ?? `customer:${customerUserId}`;
 
-    return this.db.transaction(async (tx) => {
+    return this.withTx(options?.tx, async (tx) => {
       const outcome = await this.transitionBooking(tx, {
         bookingId,
         actor,
@@ -702,6 +741,56 @@ export class BookingService implements BookingExpiryWorkerPort {
     });
   }
 
+  /**
+   * Acquires a row-level lock on the customer's booking inside `tx` and prepares it for payment:
+   * - Validates ownership (404 if missing or owned by another customer);
+   * - Enforces D-018 (`emailVerified`);
+   * - Verifies status is `held` or `payment_pending` and `hold_expires_at > now()` (DB clock);
+   * - Transitions `held -> payment_pending` if needed.
+   */
+  async prepareForCheckout(
+    rawReference: string,
+    customerUserId: string,
+    tx: DatabaseTransaction,
+  ): Promise<MarkPaymentPendingResult> {
+    const reference = normalizeBookingReference(rawReference);
+    if (!reference) {
+      return { ok: false, reason: 'not_found' };
+    }
+
+    const [locked] = await tx
+      .select()
+      .from(bookingBookings)
+      .where(eq(bookingBookings.reference, reference))
+      .for('update');
+
+    if (!locked || locked.customerUserId !== customerUserId) {
+      return { ok: false, reason: 'not_found' };
+    }
+
+    const emailVerified = await this.identityService.isEmailVerified(customerUserId);
+    if (!emailVerified) {
+      return { ok: false, reason: 'email_not_verified' };
+    }
+
+    if (locked.status !== 'held' && locked.status !== 'payment_pending') {
+      return { ok: false, reason: 'conflict' };
+    }
+
+    const clockRes = await tx.execute(
+      sql`SELECT (${locked.holdExpiresAt}::timestamptz > now()) AS "stillValid"`,
+    );
+    if (clockRes.rows[0]?.['stillValid'] !== true) {
+      return { ok: false, reason: 'conflict' };
+    }
+
+    if (locked.status === 'held') {
+      return this.markPaymentPending(locked.id, customerUserId, { tx });
+    }
+
+    return { ok: true, booking: toBookingDetailDto(locked) };
+  }
+
   async markPaymentPendingByReferenceHttp(
     rawReference: string,
     customerUserId: string,
@@ -735,12 +824,12 @@ export class BookingService implements BookingExpiryWorkerPort {
   }
 
   /**
-   * Internal API (for P2-06 payment capture webhook): idempotently confirms a `payment_pending` booking.
+   * Internal API (for P2-05/P2-06 payment capture webhook): idempotently confirms a `payment_pending` booking.
    */
   async confirm(
     bookingId: string,
     paymentRef: string,
-    options?: { readonly expectedVersion?: number },
+    options?: { readonly expectedVersion?: number; readonly tx?: DatabaseTransaction },
   ): Promise<ConfirmBookingResult> {
     if (!UUID_REGEX.test(bookingId)) {
       return { ok: false, reason: 'not_found' };
@@ -750,7 +839,7 @@ export class BookingService implements BookingExpiryWorkerPort {
       throw bookingValidationException('paymentRef is required');
     }
 
-    return this.db.transaction(async (tx) => {
+    return this.withTx(options?.tx, async (tx) => {
       const outcome = await this.transitionBooking(tx, {
         bookingId,
         actor: 'system:payment',
@@ -1014,7 +1103,11 @@ export class BookingService implements BookingExpiryWorkerPort {
       .where(eq(bookingEvents.bookingId, row.id))
       .orderBy(bookingEvents.at, bookingEvents.id);
 
-    return toBookingDetailDto(row, events.map(toBookingEventDto));
+    const payment = this.paymentSummaryPort
+      ? await this.paymentSummaryPort.getPaymentSummaryForBooking(row.id)
+      : { status: null, attemptCount: 0 };
+
+    return toBookingDetailDto(row, events.map(toBookingEventDto), payment);
   }
 
   async listBookingsForCustomer(

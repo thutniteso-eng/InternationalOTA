@@ -22,6 +22,14 @@
 			{$STAGING_BASIC_AUTH_USER} {$STAGING_BASIC_AUTH_HASH}
 		}
 
+		handle /mock-psp/* {
+			reverse_proxy api:4000 {
+				header_up -Authorization
+				header_up X-Proxy-Secret {$PROXY_SHARED_SECRET}
+				header_up X-Forwarded-Proto https
+			}
+		}
+
 		handle /api/auth* {
 			reverse_proxy api:4000 {
 				header_up -Authorization

@@ -33,7 +33,7 @@ export async function applyRuntimeRoleGrants(
 
   await db.execute(
     sql.raw(
-      `GRANT USAGE ON SCHEMA reference, identity, platform, finance, supply, catalog, inventory, pricing, booking TO ${roleIdent};`,
+      `GRANT USAGE ON SCHEMA reference, identity, platform, finance, supply, catalog, inventory, pricing, booking, payments TO ${roleIdent};`,
     ),
   );
   await db.execute(sql.raw(`GRANT SELECT ON ALL TABLES IN SCHEMA reference TO ${roleIdent};`));
@@ -70,6 +70,14 @@ export async function applyRuntimeRoleGrants(
     sql.raw(`GRANT SELECT, INSERT ON TABLE booking.booking_events TO ${roleIdent};`),
   );
   await db.execute(
+    sql.raw(`GRANT SELECT, INSERT, UPDATE ON TABLE payments.payment_attempts TO ${roleIdent};`),
+  );
+  await db.execute(
+    sql.raw(
+      `GRANT SELECT, INSERT, UPDATE ON TABLE payments.mock_psp_transactions TO ${roleIdent};`,
+    ),
+  );
+  await db.execute(
     sql.raw(`GRANT SELECT, INSERT, UPDATE ON TABLE finance.accounts TO ${roleIdent};`),
   );
   await db.execute(
@@ -79,12 +87,12 @@ export async function applyRuntimeRoleGrants(
   );
   await db.execute(
     sql.raw(
-      `GRANT USAGE ON ALL SEQUENCES IN SCHEMA reference, identity, platform, finance, supply, catalog, inventory, pricing, booking TO ${roleIdent};`,
+      `GRANT USAGE ON ALL SEQUENCES IN SCHEMA reference, identity, platform, finance, supply, catalog, inventory, pricing, booking, payments TO ${roleIdent};`,
     ),
   );
   await db.execute(
     sql.raw(
-      `GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA finance, catalog, inventory, pricing, booking TO ${roleIdent};`,
+      `GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA finance, catalog, inventory, pricing, booking, payments TO ${roleIdent};`,
     ),
   );
 
