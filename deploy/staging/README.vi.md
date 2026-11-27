@@ -29,6 +29,20 @@ Xem mật khẩu Basic Auth khi cần truy cập trình duyệt hoặc `curl`:
 grep '^STAGING_BASIC_AUTH_' deploy/staging/.env.staging
 ```
 
+### Nạp dữ liệu Demo Phú Quốc (`demo:load`)
+
+Khởi động kèm nạp tự động:
+
+```bash
+./scripts/staging-up.sh --with-load
+```
+
+Hoặc chạy thủ công bất kỳ lúc nào bên trong container `api` sau khi `./scripts/staging-up.sh` hoàn tất (idempotent, chỉ thêm lịch khởi hành cho các ngày mới nếu chạy lại):
+
+```bash
+docker compose -f deploy/staging/compose.yml exec -T api node apps/api/dist/scripts/demo-load.js
+```
+
 ---
 
 ## 2. Dừng Staging (giữ nguyên dữ liệu)

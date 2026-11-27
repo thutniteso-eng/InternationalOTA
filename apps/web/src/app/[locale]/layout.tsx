@@ -1,7 +1,9 @@
+import '@/styles/globals.css';
 import { t } from '@internationalota/i18n';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
+import { DemoBanner } from '@/components/DemoBanner';
 import {
   buildHreflangAlternates,
   isSupportedWebLocale,
@@ -23,8 +25,8 @@ export async function generateMetadata({
   }
 
   return {
-    title: t(locale, 'home.title'),
-    description: t(locale, 'home.subtitle'),
+    title: t(locale, 'demo.list.pageTitle'),
+    description: t(locale, 'demo.list.pageDescription'),
     alternates: buildHreflangAlternates(locale),
   };
 }
@@ -43,7 +45,10 @@ export default async function LocaleLayout({
 
   return (
     <html lang={locale}>
-      <body>{children}</body>
+      <body>
+        <DemoBanner locale={locale} />
+        {children}
+      </body>
     </html>
   );
 }

@@ -69,6 +69,7 @@ export interface PublicCatalogProductSummary {
   readonly publishedAt: string;
   readonly supplierName: string;
   readonly primaryImage: PublicProductImage | null;
+  readonly fromPrice: PublicFromPriceDto | null;
   readonly distanceMeters?: number;
 }
 
@@ -79,8 +80,8 @@ export interface PublicCatalogProductDetail extends PublicCatalogProductSummary 
   readonly inclusions: readonly string[];
   readonly exclusions: readonly string[];
   readonly images: readonly PublicProductImage[];
-  readonly fromPrice: PublicFromPriceDto | null;
   readonly cancellationSummary: PublicCancellationSummaryDto | null;
+  readonly alternateSlugs: Readonly<Record<string, string>>;
 }
 
 export interface PublicCatalogListResponse {

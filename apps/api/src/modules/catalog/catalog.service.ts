@@ -29,7 +29,7 @@ import { ModuleRef } from '@nestjs/core';
 import { LocaleService } from '../../common/i18n/locale.service.js';
 import { DRIZZLE_DB } from '../../database/database.module.js';
 import type { InventoryDepartureCheckPort } from '../inventory/index.js';
-import type { PricingSummaryPort } from '../pricing/index.js';
+import type { PricingSummaryPort, PublicFromPriceDto } from '../pricing/index.js';
 import { SupplyService } from '../supply/index.js';
 import {
   catalogImagesInvalidUrlException,
@@ -1087,6 +1087,13 @@ export class CatalogService implements OnModuleInit {
       }
     }
 
+    const fromPriceByProduct = this.pricingService
+      ? await this.pricingService.getPublicProductsFromPrices(
+          pageRows.map((row) => ({ id: row.id, timeZone: row.timeZone })),
+          resolvedLocale,
+        )
+      : new Map<string, PublicFromPriceDto | null>();
+
     const items: PublicCatalogProductSummary[] = pageRows.map((row) => ({
       id: row.id,
       kind: row.kind as ProductKind,
@@ -1102,6 +1109,7 @@ export class CatalogService implements OnModuleInit {
       publishedAt: row.publishedAt.toISOString(),
       supplierName: activeSupplierNames.get(row.supplierId) ?? '',
       primaryImage: primaryImageByProduct.get(row.id) ?? null,
+      fromPrice: fromPriceByProduct.get(row.id) ?? null,
       ...(row.distanceMeters !== undefined
         ? { distanceMeters: Math.round(row.distanceMeters) }
         : {}),
@@ -1193,21 +1201,39 @@ export class CatalogService implements OnModuleInit {
       throw catalogProductNotFoundException();
     }
 
-    const imageRows = await this.db
-      .select()
-      .from(catalogProductImages)
-      .where(eq(catalogProductImages.productId, row.id))
-      .orderBy(asc(catalogProductImages.sort));
+    const [imageRows, slugRows, pricingSummary] = await Promise.all([
+      this.db
+        .select()
+        .from(catalogProductImages)
+        .where(eq(catalogProductImages.productId, row.id))
+        .orderBy(asc(catalogProductImages.sort)),
+      this.db
+        .select({
+          locale: catalogProductTranslations.locale,
+          slug: catalogProductTranslations.slug,
+        })
+        .from(catalogProductTranslations)
+        .where(
+          and(
+            eq(catalogProductTranslations.productId, row.id),
+            inArray(catalogProductTranslations.locale, enabled),
+          ),
+        ),
+      this.pricingService
+        ? this.pricingService.getPublicProductSummaryPricing(row.id, row.timeZone, locale)
+        : Promise.resolve({ fromPrice: null, cancellationSummary: null }),
+    ]);
+
+    const alternateSlugs: Record<string, string> = {};
+    for (const sr of slugRows) {
+      alternateSlugs[sr.locale] = sr.slug;
+    }
 
     const images: PublicProductImage[] = imageRows.map((img) => ({
       url: img.url,
       sort: img.sort,
       alt: pickLocalizedAlt(img.alt, locale),
     }));
-
-    const pricingSummary = this.pricingService
-      ? await this.pricingService.getPublicProductSummaryPricing(row.id, row.timeZone, locale)
-      : { fromPrice: null, cancellationSummary: null };
 
     return {
       id: row.id,
@@ -1232,6 +1258,7 @@ export class CatalogService implements OnModuleInit {
       images,
       fromPrice: pricingSummary.fromPrice,
       cancellationSummary: pricingSummary.cancellationSummary,
+      alternateSlugs,
     };
   }
 }

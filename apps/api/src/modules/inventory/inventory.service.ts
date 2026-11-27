@@ -791,4 +791,46 @@ export class InventoryService {
     `);
     return res.rows.map((row) => String(row['localDate']));
   }
+
+  /**
+   * Batched variant of getUpcomingOpenDepartureDates for catalog list cards.
+   */
+  async getUpcomingOpenDepartureDatesBatch(
+    products: readonly { readonly id: string; readonly timeZone: string }[],
+    windowDays = MAX_PUBLIC_WINDOW_DAYS,
+  ): Promise<ReadonlyMap<string, readonly string[]>> {
+    const validProducts = products.filter((p) => UUID_REGEX.test(p.id));
+    const map = new Map<string, string[]>();
+    if (validProducts.length === 0) {
+      return map;
+    }
+
+    const res = await this.db.execute(sql`
+      SELECT DISTINCT
+        p.id::text AS "productId",
+        d.local_date::text AS "localDate"
+      FROM jsonb_to_recordset(${JSON.stringify(validProducts)}::jsonb) AS p(id uuid, "timeZone" text)
+      INNER JOIN inventory.departures d
+        ON d.product_id = p.id
+      WHERE d.status = 'open'
+        AND d.starts_at > now()
+        AND now() <= d.starts_at - make_interval(mins => d.booking_cutoff_minutes)
+        AND d.local_date >= (now() AT TIME ZONE p."timeZone")::date
+        AND d.local_date <= ((now() AT TIME ZONE p."timeZone")::date + ${windowDays}::int)
+      ORDER BY "productId" ASC, "localDate" ASC
+    `);
+
+    for (const row of res.rows) {
+      const productId = String(row['productId']);
+      const localDate = String(row['localDate']);
+      const existing = map.get(productId);
+      if (existing) {
+        existing.push(localDate);
+      } else {
+        map.set(productId, [localDate]);
+      }
+    }
+
+    return map;
+  }
 }

@@ -17,6 +17,7 @@
     "format:check": "pnpm -r run format:check && prettier --check tools",
     "identity:grant-role": "pnpm --filter @internationalota/db run identity:grant-role",
     "catalog:fixtures": "pnpm --filter @internationalota/db run catalog:fixtures",
+    "demo:load": "pnpm build:packages && pnpm --filter @internationalota/api run demo:load",
     "licenses:check": "node tools/check-licenses.mjs",
     "lint": "pnpm build:packages && pnpm -r run lint && eslint tools",
     "lint:boundaries": "depcruise apps/api/src --config .dependency-cruiser.cjs",

@@ -824,4 +824,71 @@ export class PricingService {
       cancellationSummary,
     };
   }
+
+  async getPublicProductsFromPrices(
+    products: readonly { readonly id: string; readonly timeZone: string }[],
+    locale: string,
+  ): Promise<ReadonlyMap<string, PublicFromPriceDto | null>> {
+    const result = new Map<string, PublicFromPriceDto | null>();
+    if (products.length === 0) {
+      return result;
+    }
+    for (const p of products) {
+      result.set(p.id, null);
+    }
+
+    const datesByProduct = await this.inventoryService.getUpcomingOpenDepartureDatesBatch(
+      products,
+      62,
+    );
+    const pairs: Array<{ productId: string; localDate: string }> = [];
+    for (const [productId, dates] of datesByProduct.entries()) {
+      for (const localDate of dates) {
+        pairs.push({ productId, localDate });
+      }
+    }
+    if (pairs.length === 0) {
+      return result;
+    }
+
+    const res = await this.db.execute(sql`
+      SELECT
+        sub."productId" AS "productId",
+        (ARRAY_AGG(sub."currency" ORDER BY sub."amountMinor" ASC))[1] AS "currency",
+        MIN(sub."amountMinor")::text AS "amountMinor"
+      FROM (
+        SELECT
+          pair."productId"::text AS "productId",
+          pl.currency AS "currency",
+          pli.amount_minor AS "amountMinor"
+        FROM jsonb_to_recordset(${JSON.stringify(pairs)}::jsonb) AS pair("productId" uuid, "localDate" date)
+        CROSS JOIN LATERAL (
+          SELECT id, currency
+          FROM pricing.price_lists
+          WHERE product_id = pair."productId"
+            AND valid_from <= pair."localDate"
+            AND (valid_to IS NULL OR valid_to >= pair."localDate")
+          ORDER BY version DESC
+          LIMIT 1
+        ) pl
+        INNER JOIN pricing.price_list_items pli
+          ON pli.price_list_id = pl.id AND pli.pax_type = 'adult'
+      ) sub
+      GROUP BY sub."productId"
+    `);
+
+    for (const row of res.rows) {
+      const productId = String(row['productId']);
+      const currencyRaw = String(row['currency']).trim();
+      assertSupportedCurrency(currencyRaw);
+      const minMinor = BigInt(String(row['amountMinor']));
+      result.set(productId, {
+        currency: currencyRaw,
+        amountMinor: minMinor.toString(),
+        formatted: formatMoney(createMoney(minMinor, currencyRaw), locale),
+      });
+    }
+
+    return result;
+  }
 }

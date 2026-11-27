@@ -178,4 +178,9 @@ export interface PricingSummaryPort {
     timeZone: string,
     locale: string,
   ): Promise<PublicProductPricingSummary>;
+
+  getPublicProductsFromPrices(
+    products: readonly { readonly id: string; readonly timeZone: string }[],
+    locale: string,
+  ): Promise<ReadonlyMap<string, PublicFromPriceDto | null>>;
 }

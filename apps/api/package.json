@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
+    "demo:load": "pnpm build && node dist/scripts/demo-load.js",
     "format:check": "prettier --check src test"
   },
   "dependencies": {
