@@ -1521,4 +1521,96 @@ describe('Booking aggregate, state machine & expiring holds (P2-04)', () => {
     const updateMatches = serviceSrc.match(/\.update\(\s*bookingBookings\s*\)/g) ?? [];
     expect(updateMatches).toHaveLength(1);
   }, 60_000);
+
+  it('paginates 5 bookings with identical created_at (limit=2) without drops or duplicates in customer and admin lists', async () => {
+    const cursorUser = await signUpAndSignIn(
+      'r1-cursor@example.com',
+      'R1 Cursor User',
+      false,
+      true,
+    );
+    const tour = await createTourWithPricePolicyAndDeparture({
+      prefix: 'R1Cursor',
+      slugSuffix: `r1-cursor-${Date.now()}`,
+      capacity: 10,
+    });
+    const quote = await getQuoteForPax(tour.productId, tour.departureId, 1);
+
+    const sharedCreatedAt = '2026-12-01T10:00:00.123456Z';
+    const fixedIds = [
+      '01940000-0000-7000-8000-000000000001',
+      '01940000-0000-7000-8000-000000000002',
+      '01940000-0000-7000-8000-000000000003',
+      '01940000-0000-7000-8000-000000000004',
+      '01940000-0000-7000-8000-000000000005',
+    ];
+
+    for (let i = 0; i < fixedIds.length; i++) {
+      await testDb.pool.query(
+        `INSERT INTO booking.bookings (
+          id, reference, customer_user_id, product_id, departure_id,
+          status, pax, seats, currency, total_amount_minor,
+          quote_snapshot, snapshot_hash, contact_name, contact_email, contact_phone,
+          contact_locale, allocation_ref, hold_expires_at, version, created_at, updated_at
+        ) VALUES (
+          $1::uuid, $2, $3, $4::uuid, $5::uuid,
+          'held', $6::jsonb, 1, $7, $8::bigint,
+          $9::jsonb, $10, 'R1 Cursor', 'r1-cursor@example.com', '+84900000099',
+          'vi', $11, now() + interval '15 minutes', 1, $12::timestamptz, $12::timestamptz
+        )`,
+        [
+          fixedIds[i],
+          `OTA-R1CUR-${String(i + 1).padStart(4, '0')}`,
+          cursorUser.userId,
+          tour.productId,
+          tour.departureId,
+          JSON.stringify({ adult: 1, child: 0, infant: 0 }),
+          quote.currency,
+          quote.totalAmountMinor,
+          JSON.stringify(quote),
+          quote.snapshotHash,
+          `alloc-r1-cursor-${i + 1}`,
+          sharedCreatedAt,
+        ],
+      );
+    }
+
+    const collectAllPages = async (
+      pathPrefix: string,
+      cookie: string,
+    ): Promise<{ pageSizes: number[]; ids: string[] }> => {
+      const pageSizes: number[] = [];
+      const ids: string[] = [];
+      let cursor: string | null = null;
+      for (let pageIdx = 0; pageIdx < 10; pageIdx++) {
+        const sep = pathPrefix.includes('?') ? '&' : '?';
+        const url = `${baseUrl}${pathPrefix}${sep}limit=2${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
+        const res = await fetch(url, { headers: { Cookie: cookie } });
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as CustomerBookingListResponse;
+        pageSizes.push(body.items.length);
+        ids.push(...body.items.map((item) => item.id));
+        if (!body.nextCursor) {
+          break;
+        }
+        cursor = body.nextCursor;
+      }
+      return { pageSizes, ids };
+    };
+
+    const expectedDescIds = [...fixedIds].reverse();
+
+    const customerResult = await collectAllPages('/me/bookings', cursorUser.cookie);
+    expect(customerResult.pageSizes).toEqual([2, 2, 1]);
+    expect(customerResult.ids).toEqual(expectedDescIds);
+    expect(new Set(customerResult.ids).size).toBe(5);
+
+    const adminResult = await collectAllPages(
+      `/admin/bookings?departureId=${tour.departureId}`,
+      adminCookie,
+    );
+    expect(adminResult.pageSizes).toEqual([2, 2, 1]);
+    expect(adminResult.ids).toEqual(expectedDescIds);
+    expect(new Set(adminResult.ids).size).toBe(5);
+  }, 30_000);
 });

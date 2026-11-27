@@ -132,3 +132,49 @@ Giờ khởi hành: 09:00 30 thg 11, 2026 (Asia/Ho_Chi_Minh)
 - Zero new dependencies (`pnpm-lock.yaml` untouched).
 - `pnpm format:check`, `pnpm lint`, `pnpm lint:boundaries`, `pnpm typecheck`, `pnpm build`, `pnpm db:generate`, `pnpm licenses:check`, `pnpm audit --prod --audit-level high`: all passed (`exit 0`).
 - Verified fresh clone from `origin/task/H-1-hygiene` (`pnpm install --frozen-lockfile`, `format:check`, `lint`, `lint:boundaries`, `typecheck`, `build`).
+
+---
+
+## 6. R1 Fix — Microsecond Keyset Cursor Pagination (`booking.service.ts`)
+
+### Audit of All Keyset Cursors in Codebase
+
+| Endpoint / Method | Service | Cursor Fields | Status |
+| --- | --- | --- | --- |
+| `listAdminProducts` | [catalog.service.ts](file:///home/iteso/projects/InternationalOTA/apps/api/src/modules/catalog/catalog.service.ts#L867) | `createdAtCursor` (`to_char(..., 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`) + `id` | Already microsecond-safe |
+| `listPublishedProducts` (default) | [catalog.service.ts](file:///home/iteso/projects/InternationalOTA/apps/api/src/modules/catalog/catalog.service.ts#L1047) | `publishedAtCursor` (`to_char(..., 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`) + `id` | Already microsecond-safe |
+| `listPublishedProducts` (geo) | [catalog.service.ts](file:///home/iteso/projects/InternationalOTA/apps/api/src/modules/catalog/catalog.service.ts#L986) | `distanceMeters` + `id` | Numeric distance + UUID |
+| `listBookingsForCustomer` (`GET /me/bookings`) | [booking.service.ts](file:///home/iteso/projects/InternationalOTA/apps/api/src/modules/booking/booking.service.ts#L1405) | `createdAtCursor` (`to_char(..., 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`) + `id` | **Fixed** (was `toISOString()`) |
+| `listAdminBookings` (`GET /admin/bookings`) | [booking.service.ts](file:///home/iteso/projects/InternationalOTA/apps/api/src/modules/booking/booking.service.ts#L1462) | `createdAtCursor` (`to_char(..., 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`) + `id` | **Fixed** (was `toISOString()`) |
+
+### Fix & Regression Test
+
+- Re-exported `getTableColumns` in [packages/db/src/index.ts](file:///home/iteso/projects/InternationalOTA/packages/db/src/index.ts) and extracted shared `listBookingsPage` + `parseBookingListLimit` helpers in [booking.service.ts](file:///home/iteso/projects/InternationalOTA/apps/api/src/modules/booking/booking.service.ts) selecting `...getTableColumns(bookingBookings)` plus `createdAtCursor` formatted with PostgreSQL `.US` microsecond precision (`'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'`).
+- Added regression test in [booking.spec.ts](file:///home/iteso/projects/InternationalOTA/apps/api/src/modules/booking/booking.spec.ts#L1526-L1610) inserting 5 `held` bookings with identical `created_at` (`2026-12-01T10:00:00.123456Z`) and verifying `limit=2` cursor traversal returns `[2, 2, 1]` = all 5 bookings with zero drops and zero duplicates across both `GET /me/bookings` and `GET /admin/bookings`.
+
+### R1 Mutation Proof
+
+Temporarily mutated `encodeBookingCursor` input in `listBookingsPage` from `lastRow.createdAtCursor` back to `lastRow.createdAt.toISOString()`:
+
+- **Command:** `pnpm --filter @internationalota/api exec vitest run src/modules/booking/booking.spec.ts -t "paginates 5 bookings"`
+- **Observed Result (`exit 1`):**
+  ```text
+  × paginates 5 bookings with identical created_at (limit=2) without drops or duplicates in customer and admin lists
+  AssertionError: expected [ 2, 0 ] to deeply equal [ 2, 2, 1 ]
+  ❯ src/modules/booking/booking.spec.ts:1599:38
+  ```
+- Reverted mutation immediately; `booking.spec.ts` passes `10/10`.
+
+### Post-Fix Staging Cleanup Verification
+
+Re-ran `staging-cleanup-test-data` on staging:
+
+```json
+{
+  "appEnv": "staging",
+  "archivedProductsCount": 0,
+  "archivedProductSlugs": [],
+  "suspendedSuppliersCount": 0,
+  "remainingPublicProductsCount": 8
+}
+```

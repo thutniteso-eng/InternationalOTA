@@ -3,6 +3,7 @@ export {
   asc,
   desc,
   eq,
+  getTableColumns,
   gt,
   gte,
   inArray,

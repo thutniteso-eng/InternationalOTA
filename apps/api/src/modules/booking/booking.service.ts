@@ -9,6 +9,7 @@ import {
   type DatabaseTransaction,
   desc,
   eq,
+  getTableColumns,
   gte,
   lte,
   sql,
@@ -1401,20 +1402,24 @@ export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
     return toBookingDetailDto(row, events.map(toBookingEventDto), payment, refund);
   }
 
-  async listBookingsForCustomer(
-    customerUserId: string,
-    options: { readonly cursor?: string; readonly limit?: string } = {},
-  ): Promise<CustomerBookingListResponse> {
-    let limit = DEFAULT_LIST_LIMIT;
-    if (options.limit !== undefined && options.limit !== '') {
-      const parsed = Number(options.limit);
-      if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_LIST_LIMIT) {
-        throw bookingInvalidQueryException(`limit must be between 1 and ${MAX_LIST_LIMIT}`);
-      }
-      limit = parsed;
+  private parseBookingListLimit(rawLimit?: string): number {
+    if (rawLimit === undefined || rawLimit === '') {
+      return DEFAULT_LIST_LIMIT;
     }
+    const parsed = Number(rawLimit);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_LIST_LIMIT) {
+      throw bookingInvalidQueryException(`limit must be between 1 and ${MAX_LIST_LIMIT}`);
+    }
+    return parsed;
+  }
 
-    const conditions = [eq(bookingBookings.customerUserId, customerUserId)];
+  private async listBookingsPage(
+    baseConditions: readonly ReturnType<typeof sql>[],
+    options: { readonly cursor?: string; readonly limit?: string },
+  ): Promise<CustomerBookingListResponse> {
+    const limit = this.parseBookingListLimit(options.limit);
+    const conditions = [...baseConditions];
+
     if (options.cursor) {
       const decoded = decodeBookingCursor(options.cursor);
       conditions.push(
@@ -1423,9 +1428,12 @@ export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
     }
 
     const rows = await this.db
-      .select()
+      .select({
+        ...getTableColumns(bookingBookings),
+        createdAtCursor: sql<string>`to_char(${bookingBookings.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+      })
       .from(bookingBookings)
-      .where(and(...conditions))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(bookingBookings.createdAt), desc(bookingBookings.id))
       .limit(limit + 1);
 
@@ -1434,7 +1442,7 @@ export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
     const lastRow = pageRows[pageRows.length - 1];
     const nextCursor =
       hasMore && lastRow
-        ? encodeBookingCursor({ createdAt: lastRow.createdAt.toISOString(), id: lastRow.id })
+        ? encodeBookingCursor({ createdAt: lastRow.createdAtCursor, id: lastRow.id })
         : null;
 
     return {
@@ -1443,16 +1451,14 @@ export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
     };
   }
 
-  async listAdminBookings(query: AdminBookingListQuery = {}): Promise<CustomerBookingListResponse> {
-    let limit = DEFAULT_LIST_LIMIT;
-    if (query.limit !== undefined && query.limit !== '') {
-      const parsed = Number(query.limit);
-      if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_LIST_LIMIT) {
-        throw bookingInvalidQueryException(`limit must be between 1 and ${MAX_LIST_LIMIT}`);
-      }
-      limit = parsed;
-    }
+  async listBookingsForCustomer(
+    customerUserId: string,
+    options: { readonly cursor?: string; readonly limit?: string } = {},
+  ): Promise<CustomerBookingListResponse> {
+    return this.listBookingsPage([eq(bookingBookings.customerUserId, customerUserId)], options);
+  }
 
+  async listAdminBookings(query: AdminBookingListQuery = {}): Promise<CustomerBookingListResponse> {
     const conditions = [];
     if (query.status !== undefined && query.status !== '') {
       const validStatuses = ['held', 'payment_pending', 'confirmed', 'expired', 'cancelled'];
@@ -1491,31 +1497,6 @@ export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
       conditions.push(lte(bookingBookings.createdAt, new Date(`${query.to}T23:59:59.999Z`)));
     }
 
-    if (query.cursor) {
-      const decoded = decodeBookingCursor(query.cursor);
-      conditions.push(
-        sql`(${bookingBookings.createdAt}, ${bookingBookings.id}) < (${decoded.createdAt}::timestamptz, ${decoded.id}::uuid)`,
-      );
-    }
-
-    const rows = await this.db
-      .select()
-      .from(bookingBookings)
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(bookingBookings.createdAt), desc(bookingBookings.id))
-      .limit(limit + 1);
-
-    const hasMore = rows.length > limit;
-    const pageRows = hasMore ? rows.slice(0, limit) : rows;
-    const lastRow = pageRows[pageRows.length - 1];
-    const nextCursor =
-      hasMore && lastRow
-        ? encodeBookingCursor({ createdAt: lastRow.createdAt.toISOString(), id: lastRow.id })
-        : null;
-
-    return {
-      items: pageRows.map((row) => toBookingDetailDto(row)),
-      nextCursor,
-    };
+    return this.listBookingsPage(conditions, query);
   }
 }
