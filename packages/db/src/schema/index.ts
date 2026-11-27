@@ -1,3 +1,4 @@
+export * from './booking.ts';
 export * from './catalog.ts';
 export * from './finance.ts';
 export * from './identity.ts';

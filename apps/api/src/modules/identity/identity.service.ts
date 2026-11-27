@@ -247,4 +247,16 @@ export class IdentityService {
       roles,
     };
   }
+
+  /**
+   * Public D-018 check: returns true only when the user exists and has verified their email address.
+   */
+  async isEmailVerified(userId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ emailVerified: identityUsers.emailVerified })
+      .from(identityUsers)
+      .where(eq(identityUsers.id, userId))
+      .limit(1);
+    return row?.emailVerified === true;
+  }
 }

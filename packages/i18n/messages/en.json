@@ -163,5 +163,16 @@
   "demo.detail.quoteErrorFallback": "Unable to quote this selection.",
   "demo.detail.bookButtonComingSoon": "Booking coming soon",
   "demo.detail.notFoundTitle": "Tour not found",
-  "demo.detail.notFoundBody": "This tour does not exist or is not currently available."
+  "demo.detail.notFoundBody": "This tour does not exist or is not currently available.",
+  "booking.validation.invalidPayload": "Invalid booking payload: {reason}.",
+  "booking.query.invalidParams": "Invalid booking query parameters: {reason}.",
+  "booking.hold.notFound": "Booking was not found.",
+  "booking.hold.priceChanged": "Tour price or policy changed since your quote; please review the updated quote.",
+  "booking.hold.soldOut": "Not enough seats remaining for this departure.",
+  "booking.hold.tooManyActiveHolds": "You have reached the limit of {maxHolds} active holds at the same time.",
+  "booking.hold.closed": "This departure is closed or cancelled.",
+  "booking.hold.cutoffPassed": "Booking cutoff time has already passed for this departure.",
+  "booking.hold.emailNotVerified": "Please verify your email address before proceeding to payment.",
+  "booking.hold.conflict": "Current booking state conflicts with this operation.",
+  "booking.hold.notCancellable": "This booking cannot be cancelled before payment in its current status."
 }

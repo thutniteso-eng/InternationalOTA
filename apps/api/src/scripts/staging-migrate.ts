@@ -6,6 +6,7 @@ import {
 } from '@internationalota/db';
 import { PgBoss } from 'pg-boss';
 import {
+  QUEUE_BOOKING_EXPIRY,
   QUEUE_IDEMPOTENCY_CLEANUP,
   QUEUE_INBOX_RELAY,
   QUEUE_OUTBOX_RELAY,
@@ -52,6 +53,7 @@ async function main(): Promise<void> {
       await boss.createQueue(QUEUE_OUTBOX_RELAY);
       await boss.createQueue(QUEUE_INBOX_RELAY);
       await boss.createQueue(QUEUE_IDEMPOTENCY_CLEANUP);
+      await boss.createQueue(QUEUE_BOOKING_EXPIRY);
     } finally {
       await boss.stop({ graceful: true, timeout: 5_000 });
     }

@@ -68,3 +68,12 @@ export function calculateExponentialBackoffMs(attempts: number, baseBackoffMs: n
   const exponent = Math.max(0, attempts - 1);
   return Math.min(MAX_BACKOFF_MS, baseBackoffMs * 2 ** exponent);
 }
+
+export const BOOKING_EXPIRY_WORKER_PORT = 'BOOKING_EXPIRY_WORKER_PORT';
+
+export interface BookingExpiryWorkerPort {
+  expireDue(options?: { readonly limit?: number }): Promise<{
+    readonly expiredCount: number;
+    readonly skippedCount: number;
+  }>;
+}

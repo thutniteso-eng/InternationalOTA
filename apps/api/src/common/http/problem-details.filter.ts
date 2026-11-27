@@ -142,6 +142,7 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     let title = t(locale, 'http.500.title');
     let errorCode: string | undefined;
     let missing: string[] | undefined;
+    let quote: unknown;
 
     if (exception instanceof LedgerError) {
       const mapped = mapLedgerError(exception, locale);
@@ -190,6 +191,9 @@ export class ProblemDetailsFilter implements ExceptionFilter {
 
           if (typeof resObj['title'] === 'string') {
             title = resObj['title'];
+          }
+          if (typeof resObj['quote'] === 'object' && resObj['quote'] !== null) {
+            quote = resObj['quote'];
           }
         }
 
@@ -258,6 +262,7 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       detail,
       ...(status < 500 && errorCode ? { code: errorCode, i18nKey: errorCode } : {}),
       ...(status < 500 && missing ? { missing } : {}),
+      ...(status < 500 && quote !== undefined ? { quote } : {}),
       ...(requestId ? { requestId } : {}),
     });
   }
