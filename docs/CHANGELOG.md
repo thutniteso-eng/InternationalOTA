@@ -34,3 +34,4 @@
 - 2026-11-27: P2-07 merged (PR #40, accepted first pass). D-023 (nodemailer). Added TASK-P2-08 spec (email notifications, Mailpit, U1 wording fix).
 - 2026-11-27: Added TASK-P2-09 spec (booking web, Demo 2) while P2-08 is in progress.
 - 2026-11-27: P2-08 merged (PR #43). F1 flake now also seen in packages/db; hygiene task H-1 scheduled after P2-09. P2-09 assigned.
+- 2026-11-27: P2-09 merged (PR #45) — Demo 2 (sign-up → hold → Mock pay → confirmed → emails → cancel/refund) verified by e2e on staging. Added TASK-H-1 spec.

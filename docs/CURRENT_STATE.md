@@ -40,5 +40,5 @@ D-018: verified email required before payment. D-020: external integrations via 
 | P2-05 Checkout saga + Mock payment gateway (D-022) | MERGED #38 (after R1 currency-mismatch test) |
 | P2-07 Cancellation & refunds (Mock) | MERGED #40 |
 | P2-08 Email notifications (SMTP + Mailpit, D-023) | MERGED #43 (N4 at-least-once on crash window) |
-| P2-09 Booking web — Demo 2 (+U2–U4) | IN PROGRESS (Antigravity) |
-| H-1 Hygiene: F1 flaky 57P01 temp-DB teardown, N3 booking insert guard | NEXT after P2-09 |
+| P2-09 Booking web — Demo 2 (+U2–U4) | MERGED #45 — Demo 2 live on staging |
+| H-1 Hygiene: F1, N3, U5, U6 | READY — spec in implementation/tasks |
