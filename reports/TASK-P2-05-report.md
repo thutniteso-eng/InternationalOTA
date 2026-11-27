@@ -160,3 +160,13 @@ Confirmed via tunnel! booking.status=confirmed, payment={'status': 'succeeded', 
  liability:customer_prepayments:VND | liability | VND      |           0 |       750000 |      750000
 (2 rows)
 ```
+
+---
+
+## 6. Corrections (R1 — M7 Currency Mismatch Coverage)
+
+- **Added test (`apps/api/src/modules/payments/payments.spec.ts`, `R1 & M7`):**
+  - Sends a signed webhook callback with exact matching `amountMinor` (`1100000`) and mismatched `currency` (`'USD'` vs `'VND'`).
+  - Asserts booking remains `'payment_pending'` (`paymentRef === null`), `payments.payment_attempts` becomes `'failed'` (`failureReason = 'amount_mismatch'`), zero rows exist in `finance.journal_entries`, and `platform.outbox_events` contains `'payment.amount_mismatch'`.
+- **Mutation M7 Proof (`payments.service.ts` `verification.currency !== attemptCurrency` → `false`):**
+  - `M7_MUTATION_EXIT=1` — killed by `R1 & M7` at `src/modules/payments/payments.spec.ts:878` (`AssertionError: expected 'confirmed' to be 'payment_pending'`); immediately restored and verified green (`11/11` in `payments.spec.ts`, `124/124` in `@internationalota/api`).

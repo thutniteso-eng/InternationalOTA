@@ -839,6 +839,65 @@ describe('Checkout saga & Mock PSP adapter (P2-05)', () => {
     expect(outboxRes.rows.map((r) => r.event_type)).toContain('payment.amount_mismatch');
   });
 
+  it('R1 & M7: Currency mismatch with matching minor amount fails attempt, leaves booking payment_pending, writes zero ledger, enqueues outbox', async () => {
+    const r1User = await signUpAndSignIn('r1-currency@example.com', 'R1 Currency', false, true);
+    const { departureId, quote } = await createTourDeparture({
+      prefix: 'R1 Currency',
+      slugSuffix: 'r1-currency',
+      capacity: 5,
+      adultPrice: '1100000',
+    });
+    const hold = await createCustomerHold(r1User.cookie, departureId, quote);
+    const checkoutRes = await fetch(`${baseUrl}/bookings/${hold.reference}/checkout`, {
+      method: 'POST',
+      headers: { Cookie: r1User.cookie, 'Idempotency-Key': nextIdemKey() },
+    });
+    const checkout = (await checkoutRes.json()) as InitiateCheckoutResponseDto;
+
+    // Exact same minor amount (1100000) in wrong currency ('USD' instead of 'VND')
+    const signedWrongCurrency = mockProvider.buildSignedCallback({
+      eventId: randomUUID(),
+      providerRef: checkout.providerRef,
+      outcome: 'succeeded',
+      amountMinor: 1_100_000n,
+      currency: 'USD',
+      occurredAt: new Date().toISOString(),
+    });
+    const webhookRes = await fetch(`${baseUrl}/webhooks/mock-psp`, {
+      method: 'POST',
+      headers: signedWrongCurrency.headers,
+      body: signedWrongCurrency.rawBody,
+    });
+    expect(webhookRes.status).toBe(200);
+    await inboxService.relayBatch();
+
+    const detail = await bookingService.getBookingForCustomerByReference(
+      hold.reference,
+      r1User.userId,
+    );
+    expect(detail.status).toBe('payment_pending');
+    expect(detail.paymentRef).toBeNull();
+
+    const [attempt] = await db
+      .select()
+      .from(paymentsPaymentAttempts)
+      .where(eq(paymentsPaymentAttempts.id, checkout.attemptId));
+    expect(attempt?.status).toBe('failed');
+    expect(attempt?.failureReason).toBe('amount_mismatch');
+
+    const ledgerRes = await testDb.pool.query(
+      `SELECT 1 FROM finance.journal_entries WHERE source_id = $1`,
+      [checkout.attemptId],
+    );
+    expect(ledgerRes.rows).toHaveLength(0);
+
+    const outboxRes = await testDb.pool.query<{ event_type: string }>(
+      `SELECT event_type FROM platform.outbox_events WHERE aggregate_id = $1`,
+      [checkout.attemptId],
+    );
+    expect(outboxRes.rows.map((r) => r.event_type)).toContain('payment.amount_mismatch');
+  });
+
   it('AC6 & Mutation (e): Rejects bad signatures, missing headers, timestamp skew > 5m, >1MB body, and disables Mock PSP in production', async () => {
     const inboxCountBefore = (await db.select().from(inboxMessages)).length;
 
