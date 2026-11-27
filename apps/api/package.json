@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "demo:load": "pnpm build && node dist/scripts/demo-load.js",
+    "staging:cleanup-test-data": "pnpm build && node dist/scripts/staging-cleanup-test-data.js",
     "format:check": "prettier --check src test"
   },
   "dependencies": {

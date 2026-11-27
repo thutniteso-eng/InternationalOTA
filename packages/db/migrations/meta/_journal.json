@@ -127,6 +127,13 @@
       "when": 1795788221929,
       "tag": "0017_broken_zaran",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1795795316515,
+      "tag": "0018_booking_insert_guard",
+      "breakpoints": true
     }
   ]
 }

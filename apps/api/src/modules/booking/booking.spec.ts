@@ -1081,6 +1081,111 @@ describe('Booking aggregate, state machine & expiring holds (P2-04)', () => {
     });
   });
 
+  it('N3: BEFORE INSERT trigger on booking.bookings rejects pre-confirmed/invalid inserts and allows valid holds', async () => {
+    const { productId, departureId, quote } = await createTourWithPricePolicyAndDeparture({
+      prefix: 'N3 InsertGuard',
+      slugSuffix: 'n3-insert-guard',
+      capacity: 10,
+    });
+    const user = await signUpAndSignIn('n3-user@example.com', 'N3 User', false, true);
+
+    const baseArgs = [
+      user.userId,
+      productId,
+      departureId,
+      JSON.stringify({ adult: 1, child: 0, infant: 0 }),
+      JSON.stringify(quote),
+      quote.snapshotHash,
+    ];
+
+    // 1. Direct INSERT with status='confirmed' (even with payment_ref and confirmed_at) MUST fail
+    await expect(
+      testDb.pool.query(
+        `INSERT INTO booking.bookings (
+          id, reference, customer_user_id, product_id, departure_id, status,
+          pax, seats, currency, total_amount_minor, quote_snapshot, snapshot_hash,
+          contact_name, contact_email, contact_phone, contact_locale, allocation_ref,
+          hold_expires_at, payment_ref, version, confirmed_at
+        ) VALUES (
+          gen_random_uuid(), 'PQ-N3BAD001', $1, $2, $3, 'confirmed',
+          $4::jsonb, 1, 'VND', 950000, $5::jsonb, $6,
+          'Bad Actor', 'bad@example.com', '+84901234567', 'vi', 'alloc-n3-1',
+          now() + interval '15 minutes', 'pay-fake', 1, now()
+        )`,
+        baseArgs,
+      ),
+    ).rejects.toThrow(/status "held"/i);
+
+    // 2. Direct INSERT with version <> 1 MUST fail
+    await expect(
+      testDb.pool.query(
+        `INSERT INTO booking.bookings (
+          id, reference, customer_user_id, product_id, departure_id, status,
+          pax, seats, currency, total_amount_minor, quote_snapshot, snapshot_hash,
+          contact_name, contact_email, contact_phone, contact_locale, allocation_ref,
+          hold_expires_at, version
+        ) VALUES (
+          gen_random_uuid(), 'PQ-N3BAD002', $1, $2, $3, 'held',
+          $4::jsonb, 1, 'VND', 950000, $5::jsonb, $6,
+          'Bad Actor', 'bad@example.com', '+84901234567', 'vi', 'alloc-n3-2',
+          now() + interval '15 minutes', 2
+        )`,
+        baseArgs,
+      ),
+    ).rejects.toThrow(/version 1/i);
+
+    // 3. Direct INSERT with non-null payment_ref or terminal timestamp while held MUST fail
+    await expect(
+      testDb.pool.query(
+        `INSERT INTO booking.bookings (
+          id, reference, customer_user_id, product_id, departure_id, status,
+          pax, seats, currency, total_amount_minor, quote_snapshot, snapshot_hash,
+          contact_name, contact_email, contact_phone, contact_locale, allocation_ref,
+          hold_expires_at, payment_ref, version
+        ) VALUES (
+          gen_random_uuid(), 'PQ-N3BAD003', $1, $2, $3, 'held',
+          $4::jsonb, 1, 'VND', 950000, $5::jsonb, $6,
+          'Bad Actor', 'bad@example.com', '+84901234567', 'vi', 'alloc-n3-3',
+          now() + interval '15 minutes', 'sneaky-ref', 1
+        )`,
+        baseArgs,
+      ),
+    ).rejects.toThrow(/payment_ref or terminal timestamps/i);
+
+    // 4. Direct INSERT with hold_expires_at <= now() MUST fail
+    await expect(
+      testDb.pool.query(
+        `INSERT INTO booking.bookings (
+          id, reference, customer_user_id, product_id, departure_id, status,
+          pax, seats, currency, total_amount_minor, quote_snapshot, snapshot_hash,
+          contact_name, contact_email, contact_phone, contact_locale, allocation_ref,
+          hold_expires_at, version
+        ) VALUES (
+          gen_random_uuid(), 'PQ-N3BAD004', $1, $2, $3, 'held',
+          $4::jsonb, 1, 'VND', 950000, $5::jsonb, $6,
+          'Bad Actor', 'bad@example.com', '+84901234567', 'vi', 'alloc-n3-4',
+          now() - interval '1 minute', 1
+        )`,
+        baseArgs,
+      ),
+    ).rejects.toThrow(/hold_expires_at/i);
+
+    // 5. Normal createHold still inserts cleanly under the trigger
+    const validHold = await bookingService.createHold({
+      customerUserId: user.userId,
+      departureId,
+      pax: { adult: 1, child: 0, infant: 0 },
+      contact: {
+        name: 'Valid Guest',
+        email: 'valid-n3@example.com',
+        phone: '+84901234568',
+        locale: 'vi',
+      },
+      expectedSnapshotHash: quote.snapshotHash,
+    });
+    expect(validHold.ok).toBe(true);
+  });
+
   it('AC7 & AC8 & AC9 & AC10 & AC11: D-018, auth/ownership 404/401/403, anti-hoarding, cancel, PII redaction, and static write guard', async () => {
     const { departureId, quote } = await createTourWithPricePolicyAndDeparture({
       prefix: 'AC7-11',

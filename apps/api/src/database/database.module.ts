@@ -30,6 +30,8 @@ export class DatabaseModule implements OnApplicationShutdown {
   constructor(@Inject(DATABASE_POOL) private readonly pool: pg.Pool) {}
 
   async onApplicationShutdown(): Promise<void> {
-    await this.pool.end();
+    if (!this.pool.ending && !this.pool.ended) {
+      await this.pool.end();
+    }
   }
 }
