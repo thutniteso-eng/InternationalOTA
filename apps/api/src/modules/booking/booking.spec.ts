@@ -943,6 +943,144 @@ describe('Booking aggregate, state machine & expiring holds (P2-04)', () => {
     }
   });
 
+  it('R1: DB transition trigger locks immutable snapshot/contact columns and gates payment_ref and status timestamps', async () => {
+    const { departureId, quote } = await createTourWithPricePolicyAndDeparture({
+      prefix: 'R1 ColumnLocks',
+      slugSuffix: 'r1-column-locks',
+      capacity: 20,
+    });
+
+    const user = await signUpAndSignIn('r1-user@example.com', 'R1 User', false, true);
+    const hold = await bookingService.createHold({
+      customerUserId: user.userId,
+      departureId,
+      pax: { adult: 1, child: 0, infant: 0 },
+      contact: {
+        name: 'Locked Traveler',
+        email: 'locked@example.com',
+        phone: '+84900000099',
+        locale: 'en',
+      },
+      expectedSnapshotHash: quote.snapshotHash,
+    });
+    expect(hold.ok).toBe(true);
+    if (!hold.ok) return;
+
+    const immutableMutations: Array<{ label: string; setClause: string }> = [
+      { label: 'seats', setClause: 'seats = 10' },
+      { label: 'pax', setClause: `pax = '{"adult":10,"child":0,"infant":0}'::jsonb` },
+      { label: 'hold_expires_at', setClause: `hold_expires_at = now() + interval '30 days'` },
+      { label: 'quote_snapshot', setClause: `quote_snapshot = '{"tampered":true}'::jsonb` },
+      { label: 'contact_name', setClause: `contact_name = 'Tampered Name'` },
+      { label: 'contact_email', setClause: `contact_email = 'tampered@example.com'` },
+      { label: 'contact_phone', setClause: `contact_phone = '+84911111111'` },
+      { label: 'contact_locale', setClause: `contact_locale = 'vi'` },
+      { label: 'created_at', setClause: `created_at = now() - interval '1 day'` },
+    ];
+
+    for (const { label, setClause } of immutableMutations) {
+      await expect(
+        testDb.pool.query(
+          `UPDATE booking.bookings
+           SET status = 'payment_pending', version = version + 1, ${setClause}
+           WHERE id = $1`,
+          [hold.booking.id],
+        ),
+        `modifying ${label} during held -> payment_pending should fail`,
+      ).rejects.toThrow(/immutable core attributes/i);
+    }
+
+    // Setting payment_ref, confirmed_at, expired_at, or cancelled_at on the wrong transition must fail
+    await expect(
+      testDb.pool.query(
+        `UPDATE booking.bookings
+         SET status = 'payment_pending', version = version + 1, payment_ref = 'early-ref'
+         WHERE id = $1`,
+        [hold.booking.id],
+      ),
+    ).rejects.toThrow(/payment_ref/i);
+
+    await expect(
+      testDb.pool.query(
+        `UPDATE booking.bookings
+         SET status = 'payment_pending', version = version + 1, confirmed_at = now()
+         WHERE id = $1`,
+        [hold.booking.id],
+      ),
+    ).rejects.toThrow(/confirmed_at/i);
+
+    await expect(
+      testDb.pool.query(
+        `UPDATE booking.bookings
+         SET status = 'payment_pending', version = version + 1, expired_at = now()
+         WHERE id = $1`,
+        [hold.booking.id],
+      ),
+    ).rejects.toThrow(/expired_at/i);
+
+    await expect(
+      testDb.pool.query(
+        `UPDATE booking.bookings
+         SET status = 'payment_pending', version = version + 1, cancelled_at = now()
+         WHERE id = $1`,
+        [hold.booking.id],
+      ),
+    ).rejects.toThrow(/cancelled_at/i);
+
+    // Setting payment_ref or confirmed_at on a transition to cancelled must also fail
+    await expect(
+      testDb.pool.query(
+        `UPDATE booking.bookings
+         SET status = 'cancelled', version = version + 1, cancelled_at = now(), payment_ref = 'bad-ref'
+         WHERE id = $1`,
+        [hold.booking.id],
+      ),
+    ).rejects.toThrow(/payment_ref/i);
+
+    // Legal transition held -> payment_pending succeeds cleanly when immutable columns stay untouched
+    await testDb.pool.query(
+      `UPDATE booking.bookings SET status = 'payment_pending', version = version + 1 WHERE id = $1`,
+      [hold.booking.id],
+    );
+
+    // Attempting to set cancelled_at or expired_at while confirming must fail
+    await expect(
+      testDb.pool.query(
+        `UPDATE booking.bookings
+         SET status = 'confirmed', version = version + 1, payment_ref = 'r1-pay-ref', confirmed_at = now(), cancelled_at = now()
+         WHERE id = $1`,
+        [hold.booking.id],
+      ),
+    ).rejects.toThrow(/cancelled_at/i);
+
+    await expect(
+      testDb.pool.query(
+        `UPDATE booking.bookings
+         SET status = 'confirmed', version = version + 1, payment_ref = 'r1-pay-ref', confirmed_at = now(), expired_at = now()
+         WHERE id = $1`,
+        [hold.booking.id],
+      ),
+    ).rejects.toThrow(/expired_at/i);
+
+    // Legal transition payment_pending -> confirmed setting payment_ref (from NULL) and confirmed_at succeeds
+    const confirmedRes = await testDb.pool.query<{
+      status: string;
+      payment_ref: string;
+      version: number;
+    }>(
+      `UPDATE booking.bookings
+       SET status = 'confirmed', version = version + 1, payment_ref = 'r1-pay-ref', confirmed_at = now()
+       WHERE id = $1
+       RETURNING status, payment_ref, version`,
+      [hold.booking.id],
+    );
+    expect(confirmedRes.rows[0]).toEqual({
+      status: 'confirmed',
+      payment_ref: 'r1-pay-ref',
+      version: 3,
+    });
+  });
+
   it('AC7 & AC8 & AC9 & AC10 & AC11: D-018, auth/ownership 404/401/403, anti-hoarding, cancel, PII redaction, and static write guard', async () => {
     const { departureId, quote } = await createTourWithPricePolicyAndDeparture({
       prefix: 'AC7-11',

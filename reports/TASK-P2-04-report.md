@@ -133,3 +133,20 @@ $ pnpm lint:boundaries
 api-1  | {"level":"info","time":"2026-11-27T11:38:24.130Z","service":"api","env":"production","appEnv":"staging","context":"JobQueueService","level":"info","event":"booking_expiry_job_scheduled","queue":"booking-hold-expiry","cron":"* * * * *","msg":"booking_expiry_job_scheduled"}
 api-1  | {"level":"info","time":"2026-11-27T11:39:00.110Z","service":"api","env":"production","appEnv":"staging","context":"JobQueueService","level":"info","event":"booking_expiry_job_completed","expiredCount":0,"skippedCount":0,"msg":"booking_expiry_job_completed"}
 ```
+
+---
+
+## 6. Corrections (R1)
+
+- **Forward-only migration:** `packages/db/migrations/0014_booking_transition_column_locks.sql` (registered in `packages/db/migrations/meta/_journal.json`) replaces `booking.trg_fn_bookings_transition()` without touching `0013`:
+  - Locks `pax`, `seats`, `quote_snapshot`, `hold_expires_at`, `contact_name`, `contact_email`, `contact_phone`, `contact_locale`, and `created_at` (in addition to existing core immutable columns) using `IS DISTINCT FROM` (`ERRCODE = 'restrict_violation'`).
+  - Enforces that `payment_ref` and `confirmed_at` may only transition from `NULL` to a non-NULL value on `NEW.status = 'confirmed'`, `expired_at` only from `NULL` to non-NULL on `NEW.status = 'expired'`, and `cancelled_at` only from `NULL` to non-NULL on `NEW.status = 'cancelled'`.
+- **Raw SQL tests (`apps/api/src/modules/booking/booking.spec.ts`, test `R1`):**
+  - Verifies raw `UPDATE booking.bookings SET status = 'payment_pending', version = version + 1, ...` fails for every locked column (`seats`, `pax`, `hold_expires_at`, `quote_snapshot`, `contact_name`, `contact_email`, `contact_phone`, `contact_locale`, `created_at`).
+  - Verifies setting `payment_ref`, `confirmed_at`, `expired_at`, or `cancelled_at` on the wrong transition fails, while legal `held -> payment_pending -> confirmed` succeeds.
+- **R1 Mutation Proof (remove added immutable column locks from `0014`):**
+  - Temporarily stripping `pax`, `seats`, `quote_snapshot`, `hold_expires_at`, `contact_*`, `created_at` from `0014` caused `vitest run src/modules/booking/booking.spec.ts -t "R1"` to **FAIL** (`MUTATION_EXIT=1`) at `src/modules/booking/booking.spec.ts:989` (`AssertionError: promise resolved "Result{ command: 'UPDATE', …(9) }" instead of rejecting`); restored immediately and re-verified green.
+- **Post-R1 Full Verification (`ota_dev`):**
+  - `pnpm format:check`, `pnpm lint`, `pnpm lint:boundaries` (`134 modules, 553 dependencies cruised`), `pnpm typecheck`, `pnpm build`, `pnpm db:generate` (`No schema changes, nothing to migrate`), `pnpm db:migrate`: all passed.
+  - `pnpm test` (`DATABASE_URL=postgresql://ota_user:ota_password@localhost:55432/ota_dev`): `@internationalota/api` `15` files / `113` tests passed (including `booking.spec.ts` `8/8`), `@internationalota/web` `2` files / `8` tests passed, `packages/*` (`shared` `2`, `db` `19`, `money` `41`, `i18n` `21`, `time` `22`), `tools` `16` passed.
+  - `pnpm licenses:check` (`471` packages) & `pnpm audit --prod --audit-level high`: exit 0.
