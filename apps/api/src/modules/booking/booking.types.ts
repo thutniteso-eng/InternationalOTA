@@ -155,3 +155,8 @@ export interface BookingExpiryResult {
   readonly expiredCount: number;
   readonly skippedCount: number;
 }
+
+export interface BookingNotificationContext {
+  readonly booking: BookingDetailDto;
+  readonly cancellationReason: string | null;
+}

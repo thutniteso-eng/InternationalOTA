@@ -334,6 +334,7 @@ export class RefundService
     if (createdRefundId) {
       this.jobQueueService?.triggerRefundExecutorAsync();
     }
+    this.jobQueueService?.triggerOutboxRelayAsync();
 
     return result;
   }

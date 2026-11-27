@@ -26,6 +26,10 @@ export const SENSITIVE_KEYS = new Set([
   'contactphone',
   'email',
   'phone',
+  'recipient',
+  'recipientaddress',
+  'recipientemail',
+  'toemail',
 ]);
 
 const SENSITIVE_HEADERS = new Set(['authorization', 'cookie', 'set-cookie', 'x-webhook-signature']);

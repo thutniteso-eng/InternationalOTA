@@ -48,6 +48,7 @@ import type {
   AdminListProductsOptions,
   AdminProductListResponse,
   CatalogInventoryTarget,
+  CatalogNotificationProductSummary,
   CatalogPublicVisibility,
   CreateProductInput,
   GeoPoint,
@@ -1259,6 +1260,56 @@ export class CatalogService implements OnModuleInit {
       fromPrice: pricingSummary.fromPrice,
       cancellationSummary: pricingSummary.cancellationSummary,
       alternateSlugs,
+    };
+  }
+
+  /**
+   * Read-only lookup used by the notifications module when rendering transactional
+   * emails for a booking (localized title, slug, meetingPointNote, and timeZone).
+   */
+  async getProductSummaryForNotification(
+    productId: string,
+    locale: string,
+  ): Promise<CatalogNotificationProductSummary | null> {
+    if (!UUID_REGEX.test(productId)) {
+      return null;
+    }
+
+    const [product] = await this.db
+      .select({
+        id: catalogProducts.id,
+        meetingPointNote: catalogProducts.meetingPointNote,
+        timeZone: catalogProducts.timeZone,
+      })
+      .from(catalogProducts)
+      .where(eq(catalogProducts.id, productId))
+      .limit(1);
+
+    if (!product) {
+      return null;
+    }
+
+    const translations = await this.db
+      .select({
+        locale: catalogProductTranslations.locale,
+        title: catalogProductTranslations.title,
+        slug: catalogProductTranslations.slug,
+      })
+      .from(catalogProductTranslations)
+      .where(eq(catalogProductTranslations.productId, productId));
+
+    const preferred =
+      translations.find((tr) => tr.locale === locale) ??
+      translations.find((tr) => tr.locale === 'vi') ??
+      translations.find((tr) => tr.locale === 'en') ??
+      translations[0];
+
+    return {
+      id: product.id,
+      title: preferred?.title ?? 'Experience',
+      slug: preferred?.slug ?? null,
+      meetingPointNote: product.meetingPointNote,
+      timeZone: product.timeZone,
     };
   }
 }

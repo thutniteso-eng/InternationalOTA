@@ -30,6 +30,7 @@ export {
   type BookingDetailDto,
   type BookingEventDto,
   type BookingExpiryResult,
+  type BookingNotificationContext,
   type BookingPaymentSummaryDto,
   type BookingPaymentSummaryPort,
   type BookingRefundSummaryDto,

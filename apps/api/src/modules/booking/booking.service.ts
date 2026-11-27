@@ -30,7 +30,11 @@ import { LocaleService } from '../../common/i18n/locale.service.js';
 import { DRIZZLE_DB } from '../../database/database.module.js';
 import { IdentityService } from '../identity/index.js';
 import { InventoryService } from '../inventory/index.js';
-import { type BookingExpiryWorkerPort, OutboxService } from '../messaging/index.js';
+import {
+  type BookingExpiryWorkerPort,
+  JobQueueService,
+  OutboxService,
+} from '../messaging/index.js';
 import {
   isSameQuote,
   PricingService,
@@ -60,6 +64,7 @@ import {
   type BookingDetailDto,
   type BookingEventDto,
   type BookingExpiryResult,
+  type BookingNotificationContext,
   type BookingPaymentSummaryDto,
   type BookingPaymentSummaryPort,
   type BookingRefundSummaryDto,
@@ -276,6 +281,7 @@ export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
   readonly holdMinutes: number;
   private paymentSummaryPort: BookingPaymentSummaryPort | null = null;
   private confirmedCancellationPort: ConfirmedBookingCancellationPort | null = null;
+  private jobQueueService: JobQueueService | null = null;
 
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: DatabaseClient,
@@ -308,6 +314,11 @@ export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
       );
     } catch {
       this.confirmedCancellationPort = null;
+    }
+    try {
+      this.jobQueueService = this.moduleRef.get(JobQueueService, { strict: false });
+    } catch {
+      this.jobQueueService = null;
     }
   }
 
@@ -655,6 +666,8 @@ export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
         quote: toPublicQuoteResponse(snapshot, validated.contactLocale),
       };
 
+      this.jobQueueService?.triggerOutboxRelayAsync();
+
       return { ok: true, booking: dto };
     } catch (err: unknown) {
       if (err instanceof HoldTransactionAbortError) {
@@ -854,7 +867,7 @@ export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
       throw bookingValidationException('paymentRef is required');
     }
 
-    return this.withTx(options?.tx, async (tx) => {
+    const res = await this.withTx<ConfirmBookingResult>(options?.tx, async (tx) => {
       const outcome = await this.transitionBooking(tx, {
         bookingId,
         actor: 'system:payment',
@@ -900,6 +913,11 @@ export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
 
       return { ok: true, booking: toBookingDetailDto(outcome.booking) };
     });
+
+    if (res.ok && !options?.tx) {
+      this.jobQueueService?.triggerOutboxRelayAsync();
+    }
+    return res;
   }
 
   async cancelBeforePayment(
@@ -1008,6 +1026,7 @@ export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
 
     const res = await this.cancelBeforePayment(found.id, customerUserId);
     if (res.ok) {
+      this.jobQueueService?.triggerOutboxRelayAsync();
       return res.booking;
     }
     if (res.reason === 'not_found') {
@@ -1299,9 +1318,46 @@ export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
           skippedCount,
         }),
       );
+      this.jobQueueService?.triggerOutboxRelayAsync();
     }
 
     return { expiredCount, skippedCount };
+  }
+
+  /**
+   * Internal read API for the notifications module: returns booking details
+   * (including contact & locale, refund summary if present, and latest cancel reason).
+   */
+  async getNotificationBookingById(bookingId: string): Promise<BookingNotificationContext | null> {
+    if (!UUID_REGEX.test(bookingId)) {
+      return null;
+    }
+
+    const [row] = await this.db
+      .select()
+      .from(bookingBookings)
+      .where(eq(bookingBookings.id, bookingId))
+      .limit(1);
+
+    if (!row) {
+      return null;
+    }
+
+    const [cancelEvent] = await this.db
+      .select({ reason: bookingEvents.reason })
+      .from(bookingEvents)
+      .where(and(eq(bookingEvents.bookingId, row.id), eq(bookingEvents.toStatus, 'cancelled')))
+      .orderBy(desc(bookingEvents.at))
+      .limit(1);
+
+    const refund = this.paymentSummaryPort?.getRefundSummaryForBooking
+      ? await this.paymentSummaryPort.getRefundSummaryForBooking(row.id)
+      : null;
+
+    return {
+      booking: toBookingDetailDto(row, undefined, undefined, refund),
+      cancellationReason: cancelEvent?.reason ?? null,
+    };
   }
 
   async getBookingForCustomerByReference(

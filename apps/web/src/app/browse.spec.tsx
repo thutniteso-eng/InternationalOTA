@@ -265,7 +265,7 @@ describe('Customer Browse Web (P2-09A)', () => {
     expect(detailHtml).toContain('37 chỗ trống');
     expect(detailHtml).toContain('href="/en/tours/south-phu-quoc-4-island-speedboat-tour"');
     expect(detailHtml).toContain('https://www.openstreetmap.org/?mlat=10.0219&amp;mlon=104.0089');
-    expect(detailHtml).toContain('Hủy miễn phí trước 48 giờ');
+    expect(detailHtml).toContain('Hủy từ 48 giờ trở lên trước giờ khởi hành: hoàn 100%.');
 
     // Unknown slug calls Next.js notFound() -> NEXT_HTTP_ERROR_FALLBACK;404
     await expect(
@@ -330,12 +330,23 @@ describe('Customer Browse Web (P2-09A)', () => {
     expect(grouped[0]!.departures).toHaveLength(2);
 
     const rulesText = formatCancellationSentences(SAMPLE_DETAIL_VI.cancellationSummary, 'en');
-    expect(rulesText).toEqual([
-      'Free cancellation up to 48 hours before start.',
-      '50% refund up to 24 hours before start.',
-      'Non-refundable inside 24 hours before start.',
-      'Weather cancellation by operator: full refund or free reschedule.',
-    ]);
+    expect(rulesText).toMatchInlineSnapshot(`
+      [
+        "Cancel 48+ hours before start: 100% refund.",
+        "Cancel 24+ hours before start: 50% refund.",
+        "Cancel under 24 hours before start: no refund.",
+        "Weather cancellation by operator: full refund or free reschedule.",
+      ]
+    `);
+    expect(formatCancellationSentences(SAMPLE_DETAIL_VI.cancellationSummary, 'vi'))
+      .toMatchInlineSnapshot(`
+      [
+        "Hủy từ 48 giờ trở lên trước giờ khởi hành: hoàn 100%.",
+        "Hủy từ 24 giờ trở lên trước giờ khởi hành: hoàn 50%.",
+        "Hủy dưới 24 giờ trước giờ khởi hành: không hoàn tiền.",
+        "Thời tiết xấu do đơn vị vận hành hủy: hoàn 100% hoặc đổi ngày miễn phí.",
+      ]
+    `);
 
     expect(
       resolveQuoteErrorMessage(

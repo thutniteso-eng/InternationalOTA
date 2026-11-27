@@ -14,7 +14,7 @@ export interface EnqueueOutboxEventInput {
  * IMPORTANT: Delivery is at-least-once (a crash between handler execution and
  * setting `published_at` will cause redelivery). All handlers MUST be idempotent.
  */
-export type OutboxEventHandler = (event: OutboxEvent) => Promise<void>;
+export type OutboxEventHandler = (event: OutboxEvent, tx?: DatabaseTransaction) => Promise<void>;
 
 /**
  * Handler invoked by the inbox relay for verified provider webhooks.
@@ -113,4 +113,15 @@ export const DEPARTURE_BOOKING_CANCEL_WORKER_PORT = 'DEPARTURE_BOOKING_CANCEL_WO
 
 export interface DepartureBookingCancelWorkerPort {
   executeDepartureBookingCancel(payload: Record<string, unknown>): Promise<void>;
+}
+
+export const NOTIFICATION_EMAIL_SENDER_WORKER_PORT = 'NOTIFICATION_EMAIL_SENDER_WORKER_PORT';
+
+export interface NotificationEmailSenderWorkerPort {
+  processDueEmails(): Promise<{
+    readonly processedCount: number;
+    readonly sentCount: number;
+    readonly failedCount: number;
+    readonly deadCount: number;
+  }>;
 }

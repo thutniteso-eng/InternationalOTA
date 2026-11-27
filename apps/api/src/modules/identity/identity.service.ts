@@ -156,7 +156,9 @@ export class IdentityService {
       );
     }
 
-    const usingLogOnlySender = !this.emailSender || this.emailSender instanceof LogOnlyEmailSender;
+    const hasConfiguredSmtp = Boolean(process.env['SMTP_HOST']?.trim());
+    const usingLogOnlySender =
+      !this.emailSender || (this.emailSender instanceof LogOnlyEmailSender && !hasConfiguredSmtp);
     if (appEnv === 'production' && usingLogOnlySender) {
       throw new Error(
         'Refusing to start in production (APP_ENV=production) without a real EmailSender configured.',

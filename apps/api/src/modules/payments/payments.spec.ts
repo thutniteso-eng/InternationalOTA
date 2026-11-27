@@ -28,6 +28,7 @@ import { LedgerService } from '../finance/index.js';
 import { AuthGuard, EMAIL_SENDER } from '../identity/index.js';
 import { type GenerateDeparturesResult } from '../inventory/index.js';
 import { InboxService } from '../messaging/index.js';
+import { EMAIL_TRANSPORT } from '../notifications/index.js';
 import { type PublicQuoteResponse } from '../pricing/index.js';
 import type { SupplierRecord } from '../supply/index.js';
 import { MockPaymentProvider } from './mock-payment.provider.js';
@@ -995,6 +996,11 @@ describe('Checkout saga & Mock PSP adapter (P2-05)', () => {
         .useValue({
           sendVerificationEmail: () => Promise.resolve(),
           sendResetPasswordEmail: () => Promise.resolve(),
+        })
+        .overrideProvider(EMAIL_TRANSPORT)
+        .useValue({
+          isLogTransport: false,
+          send: () => Promise.resolve({ messageId: 'prod-stub' }),
         })
         .overrideGuard(AuthGuard)
         .useValue({

@@ -37,7 +37,7 @@ const DEFAULT_BASE_BACKOFF_MS = 1000;
 @Injectable()
 export class OutboxService {
   private readonly logger = new Logger(OutboxService.name);
-  private readonly handlers = new Map<string, OutboxEventHandler>();
+  private readonly handlers = new Map<string, OutboxEventHandler[]>();
   private readonly inFlight = new Set<Promise<unknown>>();
   private shuttingDown = false;
 
@@ -81,7 +81,11 @@ export class OutboxService {
   }
 
   registerHandler(eventType: string, handler: OutboxEventHandler): void {
-    this.handlers.set(eventType, handler);
+    const list = this.handlers.get(eventType) ?? [];
+    if (!list.includes(handler)) {
+      list.push(handler);
+      this.handlers.set(eventType, list);
+    }
   }
 
   clearHandlers(): void {
@@ -149,7 +153,7 @@ export class OutboxService {
         .for('update', { skipLocked: true });
 
       for (const event of claimed) {
-        const handler = this.handlers.get(event.eventType);
+        const registeredHandlers = this.handlers.get(event.eventType);
         const attempt = event.attempts + 1;
         const payloadObj =
           typeof event.payload === 'object' && event.payload !== null
@@ -166,10 +170,12 @@ export class OutboxService {
         let handlerSucceeded = false;
 
         const executeHandler = async (): Promise<void> => {
-          if (!handler) {
+          if (!registeredHandlers || registeredHandlers.length === 0) {
             throw new Error(`No handler registered for outbox event type "${event.eventType}"`);
           }
-          await handler(event);
+          for (const handler of registeredHandlers) {
+            await handler(event, tx);
+          }
         };
 
         try {
