@@ -28,3 +28,4 @@
 - 2026-11-27: P2-02 merged (PR #29), ACCEPTED WITH LIMITATIONS L1–L5; 4 extra reviewer mutations all killed. Added TASK-P2-03 spec (pricing, cancellation policy, refund function, L1 carry-over).
 - 2026-11-27: P2-03 merged (PR #31) after R1–R3 fixes; documented cross-module port pattern in SOLUTION_ARCHITECTURE.
 - 2026-11-27: Owner approved D-021 (Demo 1 pulled forward; demo data on staging). Added TASK-P2-09A spec.
+- 2026-11-27: P2-09A merged (PR #34); Owner viewed Demo 1 on staging. Added TASK-P2-04 spec (booking aggregate, DB-guarded state machine, expiring holds).
