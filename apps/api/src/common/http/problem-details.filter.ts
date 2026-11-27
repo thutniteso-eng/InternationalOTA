@@ -224,7 +224,31 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     }
 
     if (status >= 500) {
-      detail = t(locale, 'http.500.detail');
+      let preserved5xxCode: string | undefined;
+      let preserved5xxI18nKey: string | undefined;
+
+      if (
+        (status === Number(HttpStatus.BAD_GATEWAY) ||
+          status === Number(HttpStatus.SERVICE_UNAVAILABLE)) &&
+        exception instanceof HttpException
+      ) {
+        const res = exception.getResponse();
+        if (typeof res === 'object' && res !== null) {
+          const resObj = res as Record<string, unknown>;
+          if (typeof resObj['errorCode'] === 'string') {
+            preserved5xxCode = resObj['errorCode'];
+          }
+          if (typeof resObj['i18nKey'] === 'string') {
+            preserved5xxI18nKey = resObj['i18nKey'];
+          }
+        }
+      }
+
+      if (preserved5xxCode) {
+        errorCode = preserved5xxCode;
+      }
+
+      detail = preserved5xxI18nKey ? t(locale, preserved5xxI18nKey) : t(locale, 'http.500.detail');
       const titleKey = KNOWN_STATUS_TITLE_KEYS[status] ?? 'http.500.title';
       title = t(locale, titleKey);
 
@@ -245,6 +269,24 @@ export class ProblemDetailsFilter implements ExceptionFilter {
           ...(safeErr.stack ? { stack: safeErr.stack } : {}),
         }),
       );
+
+      if (status === Number(HttpStatus.CONFLICT) && !response.getHeader('Retry-After')) {
+        response.setHeader('Retry-After', '1');
+      }
+
+      response.status(status);
+      response.setHeader('Content-Type', 'application/problem+json');
+      response.setHeader('Content-Language', locale);
+      response.json({
+        type: `https://httpstatuses.com/${status}`,
+        title,
+        status,
+        detail,
+        ...(errorCode ? { code: errorCode } : {}),
+        ...(preserved5xxI18nKey ? { i18nKey: preserved5xxI18nKey } : {}),
+        ...(requestId ? { requestId } : {}),
+      });
+      return;
     }
 
     // Ensure 409 Conflict includes Retry-After header if not already set

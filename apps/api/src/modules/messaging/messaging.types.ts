@@ -1,5 +1,5 @@
 import type { IncomingHttpHeaders } from 'node:http';
-import type { InboxMessage, OutboxEvent } from '@internationalota/db';
+import type { DatabaseTransaction, InboxMessage, OutboxEvent } from '@internationalota/db';
 
 export interface EnqueueOutboxEventInput {
   aggregateType: string;
@@ -19,9 +19,11 @@ export type OutboxEventHandler = (event: OutboxEvent) => Promise<void>;
 /**
  * Handler invoked by the inbox relay for verified provider webhooks.
  *
+ * Runs inside the inbox relay's PostgreSQL savepoint transaction (`tx`) so business state,
+ * ledger postings, outbox events, and `processed_at` commit atomically.
  * IMPORTANT: Delivery is at-least-once. All handlers MUST be idempotent.
  */
-export type InboxMessageHandler = (message: InboxMessage) => Promise<void>;
+export type InboxMessageHandler = (message: InboxMessage, tx: DatabaseTransaction) => Promise<void>;
 
 export interface WebhookVerificationResult {
   eventId: string;
@@ -76,4 +78,23 @@ export interface BookingExpiryWorkerPort {
     readonly expiredCount: number;
     readonly skippedCount: number;
   }>;
+}
+
+export const PAYMENT_RECONCILIATION_WORKER_PORT = 'PAYMENT_RECONCILIATION_WORKER_PORT';
+
+export interface PaymentReconciliationWorkerPort {
+  reconcilePending(options?: {
+    readonly staleAfterMinutes?: number;
+    readonly expireAfterMinutes?: number;
+  }): Promise<{
+    readonly checkedCount: number;
+    readonly resolvedCount: number;
+    readonly expiredCount: number;
+  }>;
+}
+
+export const MOCK_PSP_DELAYED_CALLBACK_WORKER_PORT = 'MOCK_PSP_DELAYED_CALLBACK_WORKER_PORT';
+
+export interface MockPspDelayedCallbackWorkerPort {
+  deliverDelayedCallback(payload: Record<string, unknown>): Promise<void>;
 }

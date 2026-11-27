@@ -1,8 +1,10 @@
 import {
+  type AccountType,
   and,
   type DatabaseClient,
   type DatabaseTransaction,
   eq,
+  type FinanceAccount,
   financeAccounts,
   financeJournalEntries,
   financeJournalLines,
@@ -365,5 +367,60 @@ export class LedgerService {
     const netMinor = isDebitNormal ? totalDebit - totalCredit : totalCredit - totalDebit;
 
     return createMoney(netMinor, account.currency as CurrencyCode);
+  }
+
+  /**
+   * Idempotently retrieves or creates a ledger account by code inside `tx`.
+   */
+  async ensureAccount(
+    tx: DatabaseTransaction,
+    input: {
+      readonly code: string;
+      readonly name: string;
+      readonly type: AccountType;
+      readonly currency: CurrencyCode;
+    },
+  ): Promise<FinanceAccount> {
+    await tx
+      .insert(financeAccounts)
+      .values({
+        code: input.code,
+        name: input.name,
+        type: input.type,
+        currency: input.currency,
+        isActive: true,
+      })
+      .onConflictDoNothing({ target: financeAccounts.code });
+
+    const [account] = await tx
+      .select()
+      .from(financeAccounts)
+      .where(eq(financeAccounts.code, input.code))
+      .limit(1);
+
+    if (!account) {
+      throw new LedgerAccountNotFoundError(input.code);
+    }
+    if (!account.isActive) {
+      throw new LedgerAccountInactiveError(account.id);
+    }
+    if (account.currency !== input.currency) {
+      throw new LedgerCurrencyMismatchError(account.id, account.currency, input.currency);
+    }
+    if (account.type !== input.type) {
+      throw new LedgerValidationError(
+        `Account "${input.code}" has type "${account.type}", expected "${input.type}"`,
+      );
+    }
+    return account;
+  }
+
+  async getAccountByCode(code: string): Promise<FinanceAccount | null> {
+    const [account] = await this.db
+      .select()
+      .from(financeAccounts)
+      .where(eq(financeAccounts.code, code))
+      .limit(1);
+    return account ?? null;
   }
 }

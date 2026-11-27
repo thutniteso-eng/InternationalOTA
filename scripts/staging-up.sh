@@ -27,13 +27,14 @@ ensure_env_file() {
   fi
 
   echo "Generating ${ENV_FILE} with fresh random staging secrets..." >&2
-  local pg_pass owner_pass app_pass auth_secret proxy_secret basic_pass basic_hash
+  local pg_pass owner_pass app_pass auth_secret proxy_secret mock_psp_secret basic_pass basic_hash
 
   pg_pass="$(openssl rand -hex 24)"
   owner_pass="$(openssl rand -hex 24)"
   app_pass="$(openssl rand -hex 24)"
   auth_secret="$(openssl rand -hex 32)"
   proxy_secret="$(openssl rand -hex 24)"
+  mock_psp_secret="$(openssl rand -hex 24)"
   basic_pass="$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 20)"
   basic_hash="$(docker run --rm caddy:2.11.9-alpine caddy hash-password --plaintext "${basic_pass}")"
 
@@ -53,6 +54,7 @@ OWNER_DATABASE_URL=postgresql://ota_owner:${owner_pass}@postgres:5432/ota_stagin
 DATABASE_URL=postgresql://ota_app:${app_pass}@postgres:5432/ota_staging
 BETTER_AUTH_SECRET=${auth_secret}
 PROXY_SHARED_SECRET=${proxy_secret}
+MOCK_PSP_SECRET=${mock_psp_secret}
 STAGING_BASIC_AUTH_USER=staging
 STAGING_BASIC_AUTH_PASSWORD=${basic_pass}
 STAGING_BASIC_AUTH_HASH='${basic_hash}'
@@ -84,6 +86,10 @@ get_env_var() {
 }
 
 ensure_env_file
+
+if [[ -z "$(get_env_var MOCK_PSP_SECRET || true)" ]]; then
+  upsert_env_var "MOCK_PSP_SECRET" "$(openssl rand -hex 24)"
+fi
 
 chmod 755 "${STAGING_DIR}/postgres-init.sh"
 

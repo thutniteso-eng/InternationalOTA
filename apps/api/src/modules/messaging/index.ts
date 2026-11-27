@@ -4,7 +4,9 @@ export {
   QUEUE_BOOKING_EXPIRY,
   QUEUE_IDEMPOTENCY_CLEANUP,
   QUEUE_INBOX_RELAY,
+  QUEUE_MOCK_PSP_DELAYED_CALLBACK,
   QUEUE_OUTBOX_RELAY,
+  QUEUE_PAYMENT_RECONCILIATION,
 } from './job-queue.service.js';
 export { MessagingModule } from './messaging.module.js';
 export {
@@ -14,8 +16,12 @@ export {
   type EnqueueOutboxEventInput,
   type InboxMessageHandler,
   type InboxRelayOptions,
+  MOCK_PSP_DELAYED_CALLBACK_WORKER_PORT,
+  type MockPspDelayedCallbackWorkerPort,
   type OutboxEventHandler,
   type OutboxRelayOptions,
+  PAYMENT_RECONCILIATION_WORKER_PORT,
+  type PaymentReconciliationWorkerPort,
   type WebhookVerificationResult,
   type WebhookVerifier,
 } from './messaging.types.js';

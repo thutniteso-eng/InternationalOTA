@@ -11,13 +11,22 @@ import { ModuleRef } from '@nestjs/core';
 import { PgBoss } from 'pg-boss';
 import { DRIZZLE_DB } from '../../database/database.module.js';
 import { InboxService } from './inbox.service.js';
-import { BOOKING_EXPIRY_WORKER_PORT, type BookingExpiryWorkerPort } from './messaging.types.js';
+import {
+  BOOKING_EXPIRY_WORKER_PORT,
+  type BookingExpiryWorkerPort,
+  MOCK_PSP_DELAYED_CALLBACK_WORKER_PORT,
+  type MockPspDelayedCallbackWorkerPort,
+  PAYMENT_RECONCILIATION_WORKER_PORT,
+  type PaymentReconciliationWorkerPort,
+} from './messaging.types.js';
 import { OutboxService } from './outbox.service.js';
 
 export const QUEUE_OUTBOX_RELAY = 'outbox-relay';
 export const QUEUE_INBOX_RELAY = 'inbox-relay';
 export const QUEUE_IDEMPOTENCY_CLEANUP = 'idempotency-keys-cleanup';
 export const QUEUE_BOOKING_EXPIRY = 'booking-hold-expiry';
+export const QUEUE_PAYMENT_RECONCILIATION = 'payment-reconciliation';
+export const QUEUE_MOCK_PSP_DELAYED_CALLBACK = 'mock-psp-delayed-callback';
 
 const EXPIRY_WORKER_BATCH_LIMIT = 50;
 
@@ -31,6 +40,8 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
   private boss: PgBoss | null = null;
   private started = false;
   private bookingExpiryWorker: BookingExpiryWorkerPort | null = null;
+  private paymentReconciliationWorker: PaymentReconciliationWorkerPort | null = null;
+  private mockDelayedCallbackWorker: MockPspDelayedCallbackWorkerPort | null = null;
 
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: DatabaseClient,
@@ -54,6 +65,24 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
           message: 'BOOKING_EXPIRY_WORKER_PORT is not registered in this application context.',
         }),
       );
+    }
+
+    try {
+      this.paymentReconciliationWorker = this.moduleRef.get<PaymentReconciliationWorkerPort>(
+        PAYMENT_RECONCILIATION_WORKER_PORT,
+        { strict: false },
+      );
+    } catch {
+      this.paymentReconciliationWorker = null;
+    }
+
+    try {
+      this.mockDelayedCallbackWorker = this.moduleRef.get<MockPspDelayedCallbackWorkerPort>(
+        MOCK_PSP_DELAYED_CALLBACK_WORKER_PORT,
+        { strict: false },
+      );
+    } catch {
+      this.mockDelayedCallbackWorker = null;
     }
 
     if (process.env['PG_BOSS_DISABLED'] === 'true') {
@@ -95,6 +124,8 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
     await boss.createQueue(QUEUE_INBOX_RELAY);
     await boss.createQueue(QUEUE_IDEMPOTENCY_CLEANUP);
     await boss.createQueue(QUEUE_BOOKING_EXPIRY);
+    await boss.createQueue(QUEUE_PAYMENT_RECONCILIATION);
+    await boss.createQueue(QUEUE_MOCK_PSP_DELAYED_CALLBACK);
 
     await boss.work(QUEUE_OUTBOX_RELAY, async () => {
       let processed = 0;
@@ -118,11 +149,26 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
       await this.runBookingExpiryBatch();
     });
 
+    await boss.work(QUEUE_PAYMENT_RECONCILIATION, async () => {
+      await this.runPaymentReconciliationBatch();
+    });
+
+    await boss.work(QUEUE_MOCK_PSP_DELAYED_CALLBACK, async (jobs) => {
+      if (!this.mockDelayedCallbackWorker) {
+        return;
+      }
+      for (const job of jobs) {
+        const data = (job.data ?? {}) as Record<string, unknown>;
+        await this.mockDelayedCallbackWorker.deliverDelayedCallback(data);
+      }
+    });
+
     // Daily cleanup of expired platform.idempotency_keys rows
     await boss.schedule(QUEUE_IDEMPOTENCY_CLEANUP, '0 3 * * *');
     await boss.schedule(QUEUE_OUTBOX_RELAY, '* * * * *');
     await boss.schedule(QUEUE_INBOX_RELAY, '* * * * *');
     await boss.schedule(QUEUE_BOOKING_EXPIRY, '* * * * *');
+    await boss.schedule(QUEUE_PAYMENT_RECONCILIATION, '*/5 * * * *');
 
     this.logger.log(
       JSON.stringify({
@@ -187,11 +233,50 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
   /**
    * Triggers an immediate pg-boss job on the given queue (e.g. for tests or manual dispatch).
    */
-  async sendJob(queueName: string, data: Record<string, unknown> = {}): Promise<string | null> {
+  isStarted(): boolean {
+    return this.started && this.boss !== null;
+  }
+
+  async sendJob(
+    queueName: string,
+    data: Record<string, unknown> = {},
+    options?: { readonly startAfter?: number },
+  ): Promise<string | null> {
     if (!this.boss || !this.started) {
       throw new Error('JobQueueService is not started');
     }
+    if (options?.startAfter !== undefined) {
+      return this.boss.send(queueName, data, { startAfter: options.startAfter });
+    }
     return this.boss.send(queueName, data);
+  }
+
+  triggerInboxRelayAsync(): void {
+    if (!this.boss || !this.started) {
+      return;
+    }
+    void this.boss.send(QUEUE_INBOX_RELAY, {}).catch(() => undefined);
+  }
+
+  async runPaymentReconciliationBatch(): Promise<{
+    checkedCount: number;
+    resolvedCount: number;
+    expiredCount: number;
+  }> {
+    if (!this.paymentReconciliationWorker) {
+      return { checkedCount: 0, resolvedCount: 0, expiredCount: 0 };
+    }
+    const res = await this.paymentReconciliationWorker.reconcilePending();
+    this.logger.log(
+      JSON.stringify({
+        level: 'info',
+        event: 'payment_reconciliation_job_completed',
+        checkedCount: res.checkedCount,
+        resolvedCount: res.resolvedCount,
+        expiredCount: res.expiredCount,
+      }),
+    );
+    return res;
   }
 
   /**

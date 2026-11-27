@@ -1,6 +1,7 @@
-import { Controller, HttpCode, HttpStatus, Param, Post, Req } from '@nestjs/common';
+import { Controller, HttpCode, HttpStatus, Optional, Param, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { InboxService } from './inbox.service.js';
+import { JobQueueService } from './job-queue.service.js';
 
 /**
  * Receives incoming provider webhooks at `POST /webhooks/:provider`.
@@ -8,7 +9,10 @@ import { InboxService } from './inbox.service.js';
  */
 @Controller('webhooks')
 export class WebhooksController {
-  constructor(private readonly inboxService: InboxService) {}
+  constructor(
+    private readonly inboxService: InboxService,
+    @Optional() private readonly jobQueueService?: JobQueueService,
+  ) {}
 
   @Post(':provider')
   @HttpCode(HttpStatus.OK)
@@ -22,7 +26,10 @@ export class WebhooksController {
         ? Buffer.from(req.body, 'utf8')
         : Buffer.alloc(0);
 
-    await this.inboxService.receiveWebhook(provider, rawBody, req.headers);
+    const received = await this.inboxService.receiveWebhook(provider, rawBody, req.headers);
+    if (!received.duplicate && received.provider !== 'test') {
+      this.jobQueueService?.triggerInboxRelayAsync();
+    }
     return { accepted: true };
   }
 }

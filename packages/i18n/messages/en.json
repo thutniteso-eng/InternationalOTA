@@ -174,5 +174,22 @@
   "booking.hold.cutoffPassed": "Booking cutoff time has already passed for this departure.",
   "booking.hold.emailNotVerified": "Please verify your email address before proceeding to payment.",
   "booking.hold.conflict": "Current booking state conflicts with this operation.",
-  "booking.hold.notCancellable": "This booking cannot be cancelled before payment in its current status."
+  "booking.hold.notCancellable": "This booking cannot be cancelled before payment in its current status.",
+  "payments.checkout.tooManyAttempts": "Maximum number of payment attempts ({maxAttempts}) reached for this booking.",
+  "payments.checkout.noProvider": "No payment provider is currently available.",
+  "payments.checkout.providerUnavailable": "The payment gateway is temporarily unavailable. Please try again.",
+  "payments.checkout.invalidReturnUrl": "Invalid return URL.",
+  "payments.mock.title": "Mock Payment Gateway",
+  "payments.mock.subtitle": "Simulator checkout page for local and staging verification",
+  "payments.mock.bookingReferenceLabel": "Booking reference",
+  "payments.mock.amountLabel": "Amount due",
+  "payments.mock.statusLabel": "Current gateway status",
+  "payments.mock.paySuccess": "Pay successfully",
+  "payments.mock.payFail": "Fail payment",
+  "payments.mock.cancelBack": "Cancel / go back",
+  "payments.mock.devPanelTitle": "Developer fault injection panel",
+  "payments.mock.devDuplicate": "Success + duplicate callback",
+  "payments.mock.devDelayed3m": "Success delivered after 3 minutes",
+  "payments.mock.devWrongAmount": "Success with wrong amount",
+  "payments.mock.notFound": "Mock payment transaction was not found."
 }

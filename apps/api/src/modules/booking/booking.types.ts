@@ -37,6 +37,17 @@ export interface BookingEventDto {
   readonly at: string;
 }
 
+export interface BookingPaymentSummaryDto {
+  readonly status: string | null;
+  readonly attemptCount: number;
+}
+
+export const BOOKING_PAYMENT_SUMMARY_PORT = 'BOOKING_PAYMENT_SUMMARY_PORT';
+
+export interface BookingPaymentSummaryPort {
+  getPaymentSummaryForBooking(bookingId: string): Promise<BookingPaymentSummaryDto>;
+}
+
 export interface BookingDetailDto {
   readonly id: string;
   readonly reference: string;
@@ -63,6 +74,7 @@ export interface BookingDetailDto {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly events?: readonly BookingEventDto[];
+  readonly payment?: BookingPaymentSummaryDto;
 }
 
 export interface CustomerBookingListResponse {

@@ -174,5 +174,22 @@
   "booking.hold.cutoffPassed": "Đã quá thời hạn nhận đặt chỗ cho lịch khởi hành này.",
   "booking.hold.emailNotVerified": "Vui lòng xác minh địa chỉ email trước khi tiếp tục thanh toán.",
   "booking.hold.conflict": "Trạng thái đơn đặt chỗ hiện tại không cho phép thực hiện thao tác này.",
-  "booking.hold.notCancellable": "Không thể hủy đơn đặt chỗ trước thanh toán ở trạng thái hiện tại."
+  "booking.hold.notCancellable": "Không thể hủy đơn đặt chỗ trước thanh toán ở trạng thái hiện tại.",
+  "payments.checkout.tooManyAttempts": "Đơn đặt chỗ đã đạt giới hạn tối đa {maxAttempts} lần thử thanh toán.",
+  "payments.checkout.noProvider": "Hiện chưa có cổng thanh toán khả dụng.",
+  "payments.checkout.providerUnavailable": "Cổng thanh toán tạm thời gián đoạn. Vui lòng thử lại.",
+  "payments.checkout.invalidReturnUrl": "Đường dẫn quay về không hợp lệ.",
+  "payments.mock.title": "Cổng thanh toán giả lập (Mock PSP)",
+  "payments.mock.subtitle": "Trang thanh toán mô phỏng dành cho kiểm thử nội bộ và staging",
+  "payments.mock.bookingReferenceLabel": "Mã đặt chỗ",
+  "payments.mock.amountLabel": "Số tiền cần thanh toán",
+  "payments.mock.statusLabel": "Trạng thái giao dịch hiện tại",
+  "payments.mock.paySuccess": "Thanh toán thành công",
+  "payments.mock.payFail": "Thanh toán thất bại",
+  "payments.mock.cancelBack": "Hủy / quay lại",
+  "payments.mock.devPanelTitle": "Bảng mô phỏng sự cố (Dev)",
+  "payments.mock.devDuplicate": "Thành công + gửi trùng callback",
+  "payments.mock.devDelayed3m": "Thành công giao sau 3 phút",
+  "payments.mock.devWrongAmount": "Thành công nhưng sai số tiền",
+  "payments.mock.notFound": "Không tìm thấy giao dịch thanh toán giả lập."
 }
