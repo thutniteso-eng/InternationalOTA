@@ -59,8 +59,13 @@ STAGING_BASIC_AUTH_USER=staging
 STAGING_BASIC_AUTH_PASSWORD=${basic_pass}
 STAGING_BASIC_AUTH_HASH='${basic_hash}'
 PUBLIC_BASE_URL=https://pending.trycloudflare.com
+PUBLIC_WEB_BASE_URL=https://pending.trycloudflare.com
 BETTER_AUTH_URL=https://pending.trycloudflare.com
 AUTH_TRUSTED_ORIGINS=https://pending.trycloudflare.com
+SMTP_HOST=mailpit
+SMTP_PORT=1025
+SMTP_SECURE=false
+MAIL_FROM=no-reply@demo.internationalota.local
 EOF
   chmod 600 "$ENV_FILE"
 }
@@ -117,14 +122,19 @@ fi
 
 echo "Assigned tunnel URL: ${TUNNEL_URL}"
 upsert_env_var "PUBLIC_BASE_URL" "$TUNNEL_URL"
+upsert_env_var "PUBLIC_WEB_BASE_URL" "$TUNNEL_URL"
 upsert_env_var "BETTER_AUTH_URL" "$TUNNEL_URL"
 upsert_env_var "AUTH_TRUSTED_ORIGINS" "$TUNNEL_URL"
+upsert_env_var "SMTP_HOST" "mailpit"
+upsert_env_var "SMTP_PORT" "1025"
+upsert_env_var "SMTP_SECURE" "false"
+upsert_env_var "MAIL_FROM" "no-reply@demo.internationalota.local"
 
 echo "Building staging images (api, web, migrate)..."
 docker compose -f "$COMPOSE_FILE" build api web migrate
 
-echo "Starting postgres and waiting for health..."
-docker compose -f "$COMPOSE_FILE" up -d --no-deps --wait postgres
+echo "Starting postgres and mailpit and waiting for health..."
+docker compose -f "$COMPOSE_FILE" up -d --no-deps --wait postgres mailpit
 
 echo "Running database migrations, seed, pg-boss setup, and ota_app grants as ota_owner..."
 docker compose -f "$COMPOSE_FILE" run --rm migrate

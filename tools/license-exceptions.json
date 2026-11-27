@@ -10,5 +10,9 @@
   "nub": {
     "license": "MIT/X11",
     "reason": "Dev-only transitive dependency of currency-codes (task-approved); legacy licence string representing MIT/X11 permissive licence."
+  },
+  "nodemailer": {
+    "license": "MIT-0",
+    "reason": "Approved by D-023 (nodemailer SMTP client); MIT-0 (MIT No Attribution) permissive licence."
   }
 }

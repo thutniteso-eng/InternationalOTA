@@ -41,6 +41,19 @@ module.exports = {
         path: 'better-auth',
       },
     },
+    {
+      name: 'no-nodemailer-outside-notifications',
+      comment:
+        'Only apps/api/src/modules/notifications/ may import nodemailer (D-023). All modules must go through notifications ports.',
+      severity: 'error',
+      from: {
+        path: '^apps/api/src/',
+        pathNot: '^apps/api/src/modules/notifications/',
+      },
+      to: {
+        path: 'nodemailer',
+      },
+    },
   ],
   options: {
     doNotFollow: {

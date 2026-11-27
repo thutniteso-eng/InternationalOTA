@@ -279,6 +279,9 @@ describe('Observability: structured logs, request IDs, redaction, and async corr
         contactName: 'Flat Contact Name',
         contactEmail: 'flat-contact@example.com',
         contactPhone: '+84901112233',
+        recipient: 'secret-notif-to@example.com',
+        recipientEmail: 'secret-recipient@example.com',
+        toEmail: 'secret-to@example.com',
       },
       'direct redaction check',
     );
@@ -300,6 +303,9 @@ describe('Observability: structured logs, request IDs, redaction, and async corr
     expect(rawLogBuffer).not.toContain('Flat Contact Name');
     expect(rawLogBuffer).not.toContain('flat-contact@example.com');
     expect(rawLogBuffer).not.toContain('+84901112233');
+    expect(rawLogBuffer).not.toContain('secret-notif-to@example.com');
+    expect(rawLogBuffer).not.toContain('secret-recipient@example.com');
+    expect(rawLogBuffer).not.toContain('secret-to@example.com');
     expect(rawLogBuffer).toContain('[REDACTED]');
   });
 

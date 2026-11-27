@@ -22,6 +22,12 @@
 			{$STAGING_BASIC_AUTH_USER} {$STAGING_BASIC_AUTH_HASH}
 		}
 
+		handle /mailpit* {
+			reverse_proxy mailpit:8025 {
+				header_up -Authorization
+			}
+		}
+
 		handle /mock-psp/* {
 			reverse_proxy api:4000 {
 				header_up -Authorization

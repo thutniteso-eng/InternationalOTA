@@ -14,8 +14,24 @@ export interface EmailSender {
 @Injectable()
 export class LogOnlyEmailSender implements EmailSender {
   private readonly logger = new Logger(LogOnlyEmailSender.name);
+  private delegate: EmailSender | null = null;
+
+  /**
+   * Internal hook invoked by `NotificationsModule` on startup to route Identity
+   * verification & reset emails through the active `EmailTransport` (`SmtpEmailTransport`).
+   */
+  setDelegate(delegate: EmailSender | null): void {
+    this.delegate = delegate;
+  }
+
+  hasDelegate(): boolean {
+    return this.delegate !== null;
+  }
 
   sendVerificationEmail(params: { to: string; url: string }): Promise<void> {
+    if (this.delegate) {
+      return this.delegate.sendVerificationEmail(params);
+    }
     this.logger.log(
       JSON.stringify({
         level: 'info',
@@ -28,6 +44,9 @@ export class LogOnlyEmailSender implements EmailSender {
   }
 
   sendResetPasswordEmail(params: { to: string; url: string }): Promise<void> {
+    if (this.delegate) {
+      return this.delegate.sendResetPasswordEmail(params);
+    }
     this.logger.log(
       JSON.stringify({
         level: 'info',

@@ -15,6 +15,11 @@ export {
 } from './negotiate.ts';
 export { extractIcuArguments, validateCatalogParity, type CatalogParityResult } from './parity.ts';
 export {
+  formatCancellationPolicySentences,
+  type CancellationPolicyRule,
+  type CancellationPolicySummary,
+} from './policy.ts';
+export {
   MissingTranslationKeyError,
   setI18nWarnLogger,
   t,

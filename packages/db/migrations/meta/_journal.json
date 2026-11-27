@@ -120,6 +120,13 @@
       "when": 1795785748415,
       "tag": "0016_vengeful_arclight",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1795788221929,
+      "tag": "0017_broken_zaran",
+      "breakpoints": true
     }
   ]
 }

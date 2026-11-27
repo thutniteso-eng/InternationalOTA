@@ -52,9 +52,15 @@ services:
       DEFAULT_LOCALE: vi
       PAYMENT_DEFAULT_PROVIDER: mock
       MOCK_PSP_CALLBACK_URL: 'http://api:4000/webhooks/mock-psp'
+      SMTP_HOST: mailpit
+      SMTP_PORT: '1025'
+      SMTP_SECURE: 'false'
+      MAIL_FROM: no-reply@demo.internationalota.local
     depends_on:
       migrate:
         condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy
     networks:
       - app_net
     healthcheck:
@@ -101,6 +107,19 @@ services:
       timeout: 5s
       retries: 12
       start_period: 15s
+
+  mailpit:
+    image: axllent/mailpit:v1.24.1
+    restart: unless-stopped
+    command: ['--webroot', '/mailpit/']
+    networks:
+      - app_net
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:8025/mailpit/api/v1/info']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
 
   caddy:
     image: caddy:2.11.9-alpine

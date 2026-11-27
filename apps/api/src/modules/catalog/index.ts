@@ -17,6 +17,7 @@ export type {
   AdminListProductsOptions,
   AdminProductListResponse,
   CatalogInventoryTarget,
+  CatalogNotificationProductSummary,
   CatalogPublicVisibility,
   CreateProductInput,
   GeoPoint,

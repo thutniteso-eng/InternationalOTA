@@ -156,3 +156,11 @@ export interface CatalogPublicVisibility {
   readonly kind: ProductKind | null;
   readonly timeZone: string | null;
 }
+
+export interface CatalogNotificationProductSummary {
+  readonly id: string;
+  readonly title: string;
+  readonly slug: string | null;
+  readonly meetingPointNote: string | null;
+  readonly timeZone: string;
+}

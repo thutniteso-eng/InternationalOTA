@@ -18,6 +18,8 @@ import {
   type DepartureBookingCancelWorkerPort,
   MOCK_PSP_DELAYED_CALLBACK_WORKER_PORT,
   type MockPspDelayedCallbackWorkerPort,
+  NOTIFICATION_EMAIL_SENDER_WORKER_PORT,
+  type NotificationEmailSenderWorkerPort,
   PAYMENT_RECONCILIATION_WORKER_PORT,
   type PaymentReconciliationWorkerPort,
   REFUND_EXECUTOR_WORKER_PORT,
@@ -33,6 +35,7 @@ export const QUEUE_PAYMENT_RECONCILIATION = 'payment-reconciliation';
 export const QUEUE_MOCK_PSP_DELAYED_CALLBACK = 'mock-psp-delayed-callback';
 export const QUEUE_REFUND_EXECUTOR = 'refund-executor';
 export const QUEUE_DEPARTURE_BOOKING_CANCEL = 'departure-booking-cancel';
+export const QUEUE_NOTIFICATION_EMAIL_SEND = 'notification-email-send';
 
 const EXPIRY_WORKER_BATCH_LIMIT = 50;
 
@@ -50,6 +53,7 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
   private mockDelayedCallbackWorker: MockPspDelayedCallbackWorkerPort | null = null;
   private refundExecutorWorker: RefundExecutorWorkerPort | null = null;
   private departureBookingCancelWorker: DepartureBookingCancelWorkerPort | null = null;
+  private notificationEmailSenderWorker: NotificationEmailSenderWorkerPort | null = null;
 
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: DatabaseClient,
@@ -111,6 +115,15 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
       this.departureBookingCancelWorker = null;
     }
 
+    try {
+      this.notificationEmailSenderWorker = this.moduleRef.get<NotificationEmailSenderWorkerPort>(
+        NOTIFICATION_EMAIL_SENDER_WORKER_PORT,
+        { strict: false },
+      );
+    } catch {
+      this.notificationEmailSenderWorker = null;
+    }
+
     if (process.env['PG_BOSS_DISABLED'] === 'true') {
       return;
     }
@@ -154,6 +167,7 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
     await boss.createQueue(QUEUE_MOCK_PSP_DELAYED_CALLBACK);
     await boss.createQueue(QUEUE_REFUND_EXECUTOR);
     await boss.createQueue(QUEUE_DEPARTURE_BOOKING_CANCEL);
+    await boss.createQueue(QUEUE_NOTIFICATION_EMAIL_SEND);
 
     await boss.work(QUEUE_OUTBOX_RELAY, async () => {
       let processed = 0;
@@ -164,9 +178,16 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
 
     await boss.work(QUEUE_INBOX_RELAY, async () => {
       let processed = 0;
+      let anyProcessed = false;
       do {
         processed = await this.inboxService.relayBatch();
+        if (processed > 0) {
+          anyProcessed = true;
+        }
       } while (processed > 0 && !this.inboxService.isShuttingDown());
+      if (anyProcessed) {
+        this.triggerOutboxRelayAsync();
+      }
     });
 
     await boss.work(QUEUE_IDEMPOTENCY_CLEANUP, async () => {
@@ -208,6 +229,13 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
       }
     });
 
+    await boss.work(QUEUE_NOTIFICATION_EMAIL_SEND, async () => {
+      if (!this.notificationEmailSenderWorker) {
+        return;
+      }
+      await this.notificationEmailSenderWorker.processDueEmails();
+    });
+
     // Daily cleanup of expired platform.idempotency_keys rows
     await boss.schedule(QUEUE_IDEMPOTENCY_CLEANUP, '0 3 * * *');
     await boss.schedule(QUEUE_OUTBOX_RELAY, '* * * * *');
@@ -215,6 +243,7 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
     await boss.schedule(QUEUE_BOOKING_EXPIRY, '* * * * *');
     await boss.schedule(QUEUE_PAYMENT_RECONCILIATION, '*/5 * * * *');
     await boss.schedule(QUEUE_REFUND_EXECUTOR, '* * * * *');
+    await boss.schedule(QUEUE_NOTIFICATION_EMAIL_SEND, '* * * * *');
 
     this.logger.log(
       JSON.stringify({
@@ -323,6 +352,13 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
       return;
     }
     void this.boss.send(QUEUE_REFUND_EXECUTOR, {}).catch(() => undefined);
+  }
+
+  triggerNotificationSenderAsync(): void {
+    if (!this.boss || !this.started) {
+      return;
+    }
+    void this.boss.send(QUEUE_NOTIFICATION_EMAIL_SEND, {}).catch(() => undefined);
   }
 
   async runPaymentReconciliationBatch(): Promise<{
