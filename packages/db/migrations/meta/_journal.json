@@ -113,6 +113,13 @@
       "when": 1795782153457,
       "tag": "0015_polite_wind_dancer",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1795785748415,
+      "tag": "0016_vengeful_arclight",
+      "breakpoints": true
     }
   ]
 }

@@ -13,7 +13,7 @@ import {
 import { type CurrencyCode, createMoney } from '@internationalota/money';
 import { resolveAppEnv } from '@internationalota/shared';
 import { parseLocalDate } from '@internationalota/time';
-import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnModuleInit, Optional } from '@nestjs/common';
 import { DRIZZLE_DB } from '../../database/database.module.js';
 import {
   bookingConflictException,
@@ -21,11 +21,13 @@ import {
   bookingNotFoundException,
   type BookingPaymentSummaryDto,
   type BookingPaymentSummaryPort,
+  type BookingRefundSummaryDto,
   BookingService,
 } from '../booking/index.js';
 import { LedgerService } from '../finance/index.js';
 import {
   InboxService,
+  JobQueueService,
   OutboxService,
   type PaymentReconciliationWorkerPort,
 } from '../messaging/index.js';
@@ -41,7 +43,9 @@ import type {
   InitiateCheckoutRequestDto,
   InitiateCheckoutResponseDto,
   PaymentVerificationResult,
+  RefundVerificationResult,
 } from './payments.types.js';
+import { RefundService } from './refund.service.js';
 
 const MAX_ATTEMPTS_PER_BOOKING = 3;
 const CHECKOUT_TIMEOUT_MS = 10_000;
@@ -135,6 +139,58 @@ function parseVerificationPayload(message: InboxMessage): PaymentVerificationRes
   };
 }
 
+function parseRefundVerificationPayload(message: InboxMessage): RefundVerificationResult {
+  const payload = message.payload as Record<string, unknown>;
+  const eventId =
+    typeof payload['eventId'] === 'string' && payload['eventId'].trim()
+      ? payload['eventId'].trim()
+      : message.providerEventId;
+  const providerRefundRef =
+    typeof payload['providerRefundRef'] === 'string' && payload['providerRefundRef'].trim()
+      ? payload['providerRefundRef'].trim()
+      : '';
+  const refundId =
+    typeof payload['refundId'] === 'string' && payload['refundId'].trim()
+      ? payload['refundId'].trim()
+      : undefined;
+  const eventType = typeof payload['eventType'] === 'string' ? payload['eventType'].trim() : '';
+  const outcome =
+    eventType === 'refund.succeeded' || payload['outcome'] === 'succeeded'
+      ? 'succeeded'
+      : eventType === 'refund.failed' || payload['outcome'] === 'failed'
+        ? 'failed'
+        : null;
+  const rawAmount = payload['amountMinor'];
+  const amountMinor =
+    typeof rawAmount === 'string' && /^\d+$/.test(rawAmount)
+      ? BigInt(rawAmount)
+      : typeof rawAmount === 'number' && Number.isSafeInteger(rawAmount) && rawAmount >= 0
+        ? BigInt(rawAmount)
+        : null;
+  const currency =
+    typeof payload['currency'] === 'string' && /^[A-Z]{3}$/.test(payload['currency'].trim())
+      ? payload['currency'].trim()
+      : null;
+  const occurredAt =
+    typeof payload['occurredAt'] === 'string' && payload['occurredAt'].trim()
+      ? payload['occurredAt'].trim()
+      : new Date().toISOString();
+
+  if (!providerRefundRef || !outcome || amountMinor === null || !currency) {
+    throw new Error(`Malformed refund webhook payload in inbox for event "${eventId}"`);
+  }
+
+  return {
+    eventId,
+    providerRefundRef,
+    ...(refundId ? { refundId } : {}),
+    outcome,
+    amountMinor,
+    currency,
+    occurredAt,
+  };
+}
+
 @Injectable()
 export class PaymentsService
   implements OnModuleInit, BookingPaymentSummaryPort, PaymentReconciliationWorkerPort
@@ -149,6 +205,8 @@ export class PaymentsService
     private readonly inboxService: InboxService,
     private readonly registry: PaymentProviderRegistry,
     private readonly mockProvider: MockPaymentProvider,
+    private readonly refundService: RefundService,
+    @Optional() private readonly jobQueueService?: JobQueueService,
   ) {}
 
   onModuleInit(): void {
@@ -368,6 +426,16 @@ export class PaymentsService
   }
 
   async handleProviderInboxMessage(message: InboxMessage, tx: DatabaseTransaction): Promise<void> {
+    const rawPayload = message.payload as Record<string, unknown>;
+    const eventType =
+      typeof rawPayload['eventType'] === 'string' ? rawPayload['eventType'].trim() : '';
+
+    if (eventType === 'refund.succeeded' || eventType === 'refund.failed') {
+      const refundVerification = parseRefundVerificationPayload(message);
+      await this.refundService.handleRefundWebhook(tx, message.provider, refundVerification);
+      return;
+    }
+
     const verification = parseVerificationPayload(message);
     await this.processVerifiedOutcomeByProviderRef(tx, message.provider, verification, 'webhook');
   }
@@ -651,6 +719,8 @@ export class PaymentsService
       },
     });
 
+    this.jobQueueService?.triggerOutboxRelayAsync();
+
     return 'processed';
   }
 
@@ -816,5 +886,9 @@ export class PaymentsService
       status: rows[0]?.status ?? null,
       attemptCount: rows.length,
     };
+  }
+
+  async getRefundSummaryForBooking(bookingId: string): Promise<BookingRefundSummaryDto | null> {
+    return this.refundService.getRefundSummaryForBooking(bookingId);
   }
 }

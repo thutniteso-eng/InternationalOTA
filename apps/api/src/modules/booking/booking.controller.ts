@@ -17,6 +17,7 @@ import { BookingService } from './booking.service.js';
 import type {
   BookingContactInput,
   BookingDetailDto,
+  ConfirmedCancelResponseDto,
   CustomerBookingListResponse,
   HoldBookingResponseDto,
 } from './booking.types.js';
@@ -79,10 +80,10 @@ export class BookingController {
   @Post('bookings/:reference/cancel')
   @Idempotent()
   @HttpCode(HttpStatus.OK)
-  async cancelBeforePayment(
+  async cancelBooking(
     @CurrentPrincipal() principal: Principal,
     @Param('reference') reference: string,
-  ): Promise<BookingDetailDto> {
+  ): Promise<BookingDetailDto | ConfirmedCancelResponseDto> {
     return this.bookingService.cancelByReferenceHttp(reference, principal.userId);
   }
 

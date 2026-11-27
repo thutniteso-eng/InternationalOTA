@@ -42,10 +42,34 @@ export interface BookingPaymentSummaryDto {
   readonly attemptCount: number;
 }
 
+export interface BookingRefundSummaryDto {
+  readonly amountMinor: string;
+  readonly status: string;
+}
+
 export const BOOKING_PAYMENT_SUMMARY_PORT = 'BOOKING_PAYMENT_SUMMARY_PORT';
 
 export interface BookingPaymentSummaryPort {
   getPaymentSummaryForBooking(bookingId: string): Promise<BookingPaymentSummaryDto>;
+  getRefundSummaryForBooking?(bookingId: string): Promise<BookingRefundSummaryDto | null>;
+}
+
+export const CONFIRMED_BOOKING_CANCELLATION_PORT = 'CONFIRMED_BOOKING_CANCELLATION_PORT';
+
+export interface ConfirmedCancelResponseDto extends BookingDetailDto {
+  readonly refundAmountMinor: string;
+  readonly refundPercent: number;
+  readonly ruleApplied: {
+    readonly hoursBeforeStart: number;
+    readonly refundPercent: number;
+  } | null;
+}
+
+export interface ConfirmedBookingCancellationPort {
+  cancelConfirmedBooking(
+    reference: string,
+    customerUserId: string,
+  ): Promise<ConfirmedCancelResponseDto>;
 }
 
 export interface BookingDetailDto {
@@ -75,6 +99,7 @@ export interface BookingDetailDto {
   readonly updatedAt: string;
   readonly events?: readonly BookingEventDto[];
   readonly payment?: BookingPaymentSummaryDto;
+  readonly refund?: BookingRefundSummaryDto;
 }
 
 export interface CustomerBookingListResponse {

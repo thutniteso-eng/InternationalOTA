@@ -98,3 +98,19 @@ export const MOCK_PSP_DELAYED_CALLBACK_WORKER_PORT = 'MOCK_PSP_DELAYED_CALLBACK_
 export interface MockPspDelayedCallbackWorkerPort {
   deliverDelayedCallback(payload: Record<string, unknown>): Promise<void>;
 }
+
+export const REFUND_EXECUTOR_WORKER_PORT = 'REFUND_EXECUTOR_WORKER_PORT';
+
+export interface RefundExecutorWorkerPort {
+  processDueRefunds(): Promise<{
+    readonly processedCount: number;
+    readonly failedCount: number;
+    readonly manualReviewCount: number;
+  }>;
+}
+
+export const DEPARTURE_BOOKING_CANCEL_WORKER_PORT = 'DEPARTURE_BOOKING_CANCEL_WORKER_PORT';
+
+export interface DepartureBookingCancelWorkerPort {
+  executeDepartureBookingCancel(payload: Record<string, unknown>): Promise<void>;
+}

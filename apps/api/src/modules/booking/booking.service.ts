@@ -55,13 +55,17 @@ import {
 import { generateBookingReference, normalizeBookingReference } from './booking.reference.js';
 import {
   BOOKING_PAYMENT_SUMMARY_PORT,
+  CONFIRMED_BOOKING_CANCELLATION_PORT,
   type AdminBookingListQuery,
   type BookingDetailDto,
   type BookingEventDto,
   type BookingExpiryResult,
   type BookingPaymentSummaryDto,
   type BookingPaymentSummaryPort,
+  type BookingRefundSummaryDto,
   type CancelBookingResult,
+  type ConfirmedBookingCancellationPort,
+  type ConfirmedCancelResponseDto,
   type ConfirmBookingResult,
   type CreateHoldInput,
   type CreateHoldResult,
@@ -87,7 +91,7 @@ const MAX_PAX_TOTAL = 50;
 const LEGAL_TRANSITIONS: Readonly<Record<BookingStatus, readonly BookingStatus[]>> = {
   held: ['payment_pending', 'expired', 'cancelled'],
   payment_pending: ['confirmed', 'expired', 'cancelled'],
-  confirmed: [],
+  confirmed: ['cancelled'],
   expired: [],
   cancelled: [],
 };
@@ -223,6 +227,7 @@ function toBookingDetailDto(
   row: BookingRow,
   events?: readonly BookingEventDto[],
   payment?: BookingPaymentSummaryDto,
+  refund?: BookingRefundSummaryDto | null,
 ): BookingDetailDto {
   return {
     id: row.id,
@@ -251,6 +256,7 @@ function toBookingDetailDto(
     updatedAt: row.updatedAt.toISOString(),
     ...(events !== undefined ? { events } : {}),
     ...(payment !== undefined ? { payment } : {}),
+    ...(refund ? { refund } : {}),
   };
 }
 
@@ -269,6 +275,7 @@ export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
   private readonly logger = new Logger(BookingService.name);
   readonly holdMinutes: number;
   private paymentSummaryPort: BookingPaymentSummaryPort | null = null;
+  private confirmedCancellationPort: ConfirmedBookingCancellationPort | null = null;
 
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: DatabaseClient,
@@ -293,6 +300,14 @@ export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
       );
     } catch {
       this.paymentSummaryPort = null;
+    }
+    try {
+      this.confirmedCancellationPort = this.moduleRef.get<ConfirmedBookingCancellationPort>(
+        CONFIRMED_BOOKING_CANCELLATION_PORT,
+        { strict: false },
+      );
+    } catch {
+      this.confirmedCancellationPort = null;
     }
   }
 
@@ -962,20 +977,33 @@ export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
   async cancelByReferenceHttp(
     rawReference: string,
     customerUserId: string,
-  ): Promise<BookingDetailDto> {
+  ): Promise<BookingDetailDto | ConfirmedCancelResponseDto> {
     const reference = normalizeBookingReference(rawReference);
     if (!reference) {
       throw bookingNotFoundException();
     }
 
     const [found] = await this.db
-      .select({ id: bookingBookings.id, customerUserId: bookingBookings.customerUserId })
+      .select({
+        id: bookingBookings.id,
+        customerUserId: bookingBookings.customerUserId,
+        status: bookingBookings.status,
+        paymentRef: bookingBookings.paymentRef,
+      })
       .from(bookingBookings)
       .where(eq(bookingBookings.reference, reference))
       .limit(1);
 
     if (!found || found.customerUserId !== customerUserId) {
       throw bookingNotFoundException();
+    }
+
+    if (
+      (found.status === 'confirmed' ||
+        (found.status === 'cancelled' && found.paymentRef !== null)) &&
+      this.confirmedCancellationPort
+    ) {
+      return this.confirmedCancellationPort.cancelConfirmedBooking(reference, customerUserId);
     }
 
     const res = await this.cancelBeforePayment(found.id, customerUserId);
@@ -986,6 +1014,209 @@ export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
       throw bookingNotFoundException();
     }
     throw bookingNotCancellableException();
+  }
+
+  /**
+   * Public transactional API for P2-07 (`payments` module): locks a booking inside `tx`,
+   * transitions `confirmed -> cancelled`, releases allocated inventory seats inside the same `tx`,
+   * and returns the booking + DB departure timing snapshot (`startsAt`, `dbNow`).
+   */
+  async cancelConfirmedWithLock(
+    bookingIdOrRef: string,
+    options: {
+      readonly customerUserId?: string;
+      readonly actor: string;
+      readonly reason: string;
+      readonly enforceBeforeStart: boolean;
+      readonly tx: DatabaseTransaction;
+    },
+  ): Promise<
+    | { readonly kind: 'not_found' }
+    | { readonly kind: 'already_cancelled'; readonly booking: BookingDetailDto }
+    | { readonly kind: 'not_confirmed'; readonly status: BookingStatus }
+    | { readonly kind: 'too_late' }
+    | {
+        readonly kind: 'cancelled';
+        readonly booking: BookingDetailDto;
+        readonly startsAt: Date;
+        readonly dbNow: Date;
+      }
+  > {
+    const isUuid = UUID_REGEX.test(bookingIdOrRef);
+    const normalizedRef = isUuid ? null : normalizeBookingReference(bookingIdOrRef);
+    if (!isUuid && !normalizedRef) {
+      return { kind: 'not_found' };
+    }
+
+    const [locked] = await options.tx
+      .select()
+      .from(bookingBookings)
+      .where(
+        isUuid
+          ? eq(bookingBookings.id, bookingIdOrRef)
+          : eq(bookingBookings.reference, normalizedRef!),
+      )
+      .for('update');
+
+    if (
+      !locked ||
+      (options.customerUserId !== undefined && locked.customerUserId !== options.customerUserId)
+    ) {
+      return { kind: 'not_found' };
+    }
+
+    if (locked.status === 'cancelled') {
+      return { kind: 'already_cancelled', booking: toBookingDetailDto(locked) };
+    }
+    if (locked.status !== 'confirmed') {
+      return { kind: 'not_confirmed', status: locked.status as BookingStatus };
+    }
+
+    const timing = await this.inventoryService.getDepartureStartsAtWithDbNow(
+      locked.departureId,
+      options.tx,
+    );
+    if (!timing) {
+      return { kind: 'not_found' };
+    }
+    if (options.enforceBeforeStart && timing.dbNow.getTime() > timing.startsAt.getTime()) {
+      return { kind: 'too_late' };
+    }
+
+    const transition = await this.transitionBooking(options.tx, {
+      bookingId: locked.id,
+      actor: options.actor,
+      reason: options.reason,
+      expectedFromStatuses: ['confirmed'],
+      targetStatus: 'cancelled',
+    });
+
+    if (transition.kind === 'illegal') {
+      if (transition.current.status === 'cancelled') {
+        return { kind: 'already_cancelled', booking: toBookingDetailDto(transition.current) };
+      }
+      return { kind: 'not_confirmed', status: transition.current.status as BookingStatus };
+    }
+    if (transition.kind !== 'transitioned') {
+      return { kind: 'not_found' };
+    }
+
+    await this.inventoryService.release(
+      {
+        departureId: transition.booking.departureId,
+        refType: 'booking',
+        refId: transition.booking.allocationRef,
+      },
+      options.tx,
+    );
+
+    await this.outboxService.enqueue(options.tx, {
+      aggregateType: 'booking',
+      aggregateId: transition.booking.id,
+      eventType: 'booking.cancelled',
+      payload: {
+        bookingId: transition.booking.id,
+        reference: transition.booking.reference,
+        departureId: transition.booking.departureId,
+        seats: transition.booking.seats,
+        actor: options.actor,
+        reason: options.reason,
+        cancelledAt: transition.booking.cancelledAt?.toISOString() ?? null,
+      },
+    });
+
+    return {
+      kind: 'cancelled',
+      booking: toBookingDetailDto(transition.booking),
+      startsAt: timing.startsAt,
+      dbNow: timing.dbNow,
+    };
+  }
+
+  /**
+   * Public transactional API for operator departure cancellation: cancels a held/payment_pending booking
+   * without refund and releases its seats in the same `tx`.
+   */
+  async cancelActiveHoldOnDeparture(
+    bookingId: string,
+    actor: string,
+    reason: string,
+    tx: DatabaseTransaction,
+  ): Promise<boolean> {
+    if (!UUID_REGEX.test(bookingId)) {
+      return false;
+    }
+    const transition = await this.transitionBooking(tx, {
+      bookingId,
+      actor,
+      reason,
+      expectedFromStatuses: ['held', 'payment_pending'],
+      targetStatus: 'cancelled',
+    });
+    if (transition.kind !== 'transitioned') {
+      return false;
+    }
+
+    await this.inventoryService.release(
+      {
+        departureId: transition.booking.departureId,
+        refType: 'booking',
+        refId: transition.booking.allocationRef,
+      },
+      tx,
+    );
+
+    await this.outboxService.enqueue(tx, {
+      aggregateType: 'booking',
+      aggregateId: transition.booking.id,
+      eventType: 'booking.cancelled',
+      payload: {
+        bookingId: transition.booking.id,
+        reference: transition.booking.reference,
+        departureId: transition.booking.departureId,
+        seats: transition.booking.seats,
+        actor,
+        reason,
+        cancelledAt: transition.booking.cancelledAt?.toISOString() ?? null,
+      },
+    });
+
+    return true;
+  }
+
+  async listBookingsForDeparture(
+    departureId: string,
+  ): Promise<
+    readonly { readonly id: string; readonly reference: string; readonly status: BookingStatus }[]
+  > {
+    if (!UUID_REGEX.test(departureId)) {
+      return [];
+    }
+    const rows = await this.db
+      .select({
+        id: bookingBookings.id,
+        reference: bookingBookings.reference,
+        status: bookingBookings.status,
+      })
+      .from(bookingBookings)
+      .where(eq(bookingBookings.departureId, departureId));
+    return rows.map((r) => ({
+      id: r.id,
+      reference: r.reference,
+      status: r.status as BookingStatus,
+    }));
+  }
+
+  async getBookingSummaryForInternalUse(bookingId: string): Promise<BookingDetailDto | null> {
+    if (!UUID_REGEX.test(bookingId)) {
+      return null;
+    }
+    const [row] = await this.db
+      .select()
+      .from(bookingBookings)
+      .where(eq(bookingBookings.id, bookingId))
+      .limit(1);
+    return row ? toBookingDetailDto(row) : null;
   }
 
   async expireDue(options: { readonly limit?: number } = {}): Promise<BookingExpiryResult> {
@@ -1107,7 +1338,11 @@ export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
       ? await this.paymentSummaryPort.getPaymentSummaryForBooking(row.id)
       : { status: null, attemptCount: 0 };
 
-    return toBookingDetailDto(row, events.map(toBookingEventDto), payment);
+    const refund = this.paymentSummaryPort?.getRefundSummaryForBooking
+      ? await this.paymentSummaryPort.getRefundSummaryForBooking(row.id)
+      : null;
+
+    return toBookingDetailDto(row, events.map(toBookingEventDto), payment, refund);
   }
 
   async listBookingsForCustomer(

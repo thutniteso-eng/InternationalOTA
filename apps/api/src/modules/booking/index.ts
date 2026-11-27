@@ -9,6 +9,7 @@ export {
   bookingNotFoundException,
   bookingPriceChangedException,
   bookingSoldOutException,
+  bookingTooLateToCancelException,
   bookingTooManyActiveHoldsException,
   bookingValidationException,
 } from './booking.errors.js';
@@ -23,6 +24,7 @@ export {
 export { BookingService, parseBookingHoldMinutes } from './booking.service.js';
 export {
   BOOKING_PAYMENT_SUMMARY_PORT,
+  CONFIRMED_BOOKING_CANCELLATION_PORT,
   type AdminBookingListQuery,
   type BookingContactInput,
   type BookingDetailDto,
@@ -30,7 +32,10 @@ export {
   type BookingExpiryResult,
   type BookingPaymentSummaryDto,
   type BookingPaymentSummaryPort,
+  type BookingRefundSummaryDto,
   type CancelBookingResult,
+  type ConfirmedBookingCancellationPort,
+  type ConfirmedCancelResponseDto,
   type ConfirmBookingResult,
   type CreateHoldInput,
   type CreateHoldResult,
