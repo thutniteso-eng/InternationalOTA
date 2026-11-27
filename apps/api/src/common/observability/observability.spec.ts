@@ -261,7 +261,7 @@ describe('Observability: structured logs, request IDs, redaction, and async corr
     });
     expect(webhookRes.status).toBe(200);
 
-    // 3. Direct logger redaction check for sensitive fields
+    // 3. Direct logger redaction check for sensitive fields & contact PII (P1-10 + P2-04)
     pinoLogger.info(
       {
         password: secretPassword,
@@ -271,6 +271,14 @@ describe('Observability: structured logs, request IDs, redaction, and async corr
         rawBody: webhookPiiSecret,
         cardNumber: '4111111111111111',
         cvv: '987',
+        contact: {
+          name: 'Secret Contact Name',
+          email: 'secret-contact@example.com',
+          phone: '+84909998877',
+        },
+        contactName: 'Flat Contact Name',
+        contactEmail: 'flat-contact@example.com',
+        contactPhone: '+84901112233',
       },
       'direct redaction check',
     );
@@ -286,6 +294,12 @@ describe('Observability: structured logs, request IDs, redaction, and async corr
     expect(rawLogBuffer).not.toContain('secret-api-key-222');
     expect(rawLogBuffer).not.toContain('4111111111111111');
     expect(rawLogBuffer).not.toContain('"cvv":"987"');
+    expect(rawLogBuffer).not.toContain('Secret Contact Name');
+    expect(rawLogBuffer).not.toContain('secret-contact@example.com');
+    expect(rawLogBuffer).not.toContain('+84909998877');
+    expect(rawLogBuffer).not.toContain('Flat Contact Name');
+    expect(rawLogBuffer).not.toContain('flat-contact@example.com');
+    expect(rawLogBuffer).not.toContain('+84901112233');
     expect(rawLogBuffer).toContain('[REDACTED]');
   });
 

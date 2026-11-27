@@ -20,6 +20,12 @@ export const SENSITIVE_KEYS = new Set([
   'rawbody',
   'cardnumber',
   'cvv',
+  'contact',
+  'contactname',
+  'contactemail',
+  'contactphone',
+  'email',
+  'phone',
 ]);
 
 const SENSITIVE_HEADERS = new Set(['authorization', 'cookie', 'set-cookie', 'x-webhook-signature']);

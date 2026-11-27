@@ -163,5 +163,16 @@
   "demo.detail.quoteErrorFallback": "Không thể tính giá cho lựa chọn này.",
   "demo.detail.bookButtonComingSoon": "Đặt chỗ sắp ra mắt",
   "demo.detail.notFoundTitle": "Không tìm thấy trải nghiệm",
-  "demo.detail.notFoundBody": "Trải nghiệm này không tồn tại hoặc hiện chưa mở bán."
+  "demo.detail.notFoundBody": "Trải nghiệm này không tồn tại hoặc hiện chưa mở bán.",
+  "booking.validation.invalidPayload": "Dữ liệu đặt chỗ không hợp lệ: {reason}.",
+  "booking.query.invalidParams": "Tham số truy vấn đặt chỗ không hợp lệ: {reason}.",
+  "booking.hold.notFound": "Không tìm thấy đơn đặt chỗ.",
+  "booking.hold.priceChanged": "Giá hoặc chính sách đã thay đổi kể từ lần báo giá trước. Vui lòng xem lại báo giá mới nhất.",
+  "booking.hold.soldOut": "Lịch khởi hành không còn đủ chỗ trống.",
+  "booking.hold.tooManyActiveHolds": "Bạn đã đạt giới hạn tối đa {maxHolds} giữ chỗ đang hoạt động cùng lúc.",
+  "booking.hold.closed": "Lịch khởi hành này hiện đã đóng hoặc bị hủy.",
+  "booking.hold.cutoffPassed": "Đã quá thời hạn nhận đặt chỗ cho lịch khởi hành này.",
+  "booking.hold.emailNotVerified": "Vui lòng xác minh địa chỉ email trước khi tiếp tục thanh toán.",
+  "booking.hold.conflict": "Trạng thái đơn đặt chỗ hiện tại không cho phép thực hiện thao tác này.",
+  "booking.hold.notCancellable": "Không thể hủy đơn đặt chỗ trước thanh toán ở trạng thái hiện tại."
 }

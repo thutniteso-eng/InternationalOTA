@@ -4,6 +4,7 @@ import { ProblemDetailsFilter } from './common/http/problem-details.filter.js';
 import { I18nModule } from './common/i18n/i18n.module.js';
 import { DatabaseModule } from './database/database.module.js';
 import { HealthController } from './health.controller.js';
+import { BookingModule } from './modules/booking/index.js';
 import { CatalogModule } from './modules/catalog/index.js';
 import { FinanceModule } from './modules/finance/index.js';
 import { IdempotencyModule } from './modules/idempotency/index.js';
@@ -26,6 +27,7 @@ import { SupplyModule } from './modules/supply/index.js';
     PricingModule,
     InventoryModule,
     CatalogModule,
+    BookingModule,
   ],
   controllers: [HealthController],
   providers: [
