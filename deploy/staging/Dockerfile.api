@@ -57,6 +57,7 @@ COPY --from=builder /app/packages/db/migrations ./packages/db/migrations
 COPY --from=builder /app/packages/db/reference-data ./packages/db/reference-data
 COPY --from=builder /app/packages/i18n/dist ./packages/i18n/dist
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY implementation/demo-data ./implementation/demo-data
 
 RUN chown -R ota:ota /app
 USER ota

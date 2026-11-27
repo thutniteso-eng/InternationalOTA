@@ -79,6 +79,7 @@ services:
       NODE_ENV: production
       APP_ENV: staging
       DEFAULT_LOCALE: vi
+      API_INTERNAL_URL: 'http://api:4000'
       PORT: '3000'
       HOSTNAME: '0.0.0.0'
     depends_on:

@@ -5,6 +5,20 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STAGING_DIR="${ROOT_DIR}/deploy/staging"
 COMPOSE_FILE="${STAGING_DIR}/compose.yml"
 ENV_FILE="${STAGING_DIR}/.env.staging"
+WITH_LOAD=0
+
+for arg in "$@"; do
+  case "$arg" in
+    --with-load)
+      WITH_LOAD=1
+      ;;
+    *)
+      echo "Unknown argument: ${arg}" >&2
+      echo "Usage: $0 [--with-load]" >&2
+      exit 1
+      ;;
+  esac
+done
 
 ensure_env_file() {
   if [[ -f "$ENV_FILE" ]]; then
@@ -111,6 +125,11 @@ docker compose -f "$COMPOSE_FILE" run --rm migrate
 
 echo "Starting api, web, and caddy..."
 docker compose -f "$COMPOSE_FILE" up -d --no-deps --force-recreate --wait api web caddy
+
+if [[ "$WITH_LOAD" == "1" ]]; then
+  echo "Loading Phu Quoc demo catalog (--with-load)..."
+  docker compose -f "$COMPOSE_FILE" exec -T api node apps/api/dist/scripts/demo-load.js
+fi
 
 echo "Verifying public endpoint ${TUNNEL_URL}/api/health/ready (waiting for tunnel DNS propagation)..."
 READY_OK=0
