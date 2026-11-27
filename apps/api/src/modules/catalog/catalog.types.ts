@@ -1,4 +1,5 @@
 import type { ProductKind, ProductStatus } from '@internationalota/db';
+import type { PublicCancellationSummaryDto, PublicFromPriceDto } from '../pricing/index.js';
 
 export interface GeoPoint {
   readonly lat: number;
@@ -78,6 +79,8 @@ export interface PublicCatalogProductDetail extends PublicCatalogProductSummary 
   readonly inclusions: readonly string[];
   readonly exclusions: readonly string[];
   readonly images: readonly PublicProductImage[];
+  readonly fromPrice: PublicFromPriceDto | null;
+  readonly cancellationSummary: PublicCancellationSummaryDto | null;
 }
 
 export interface PublicCatalogListResponse {

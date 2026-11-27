@@ -72,6 +72,14 @@ export function catalogInvalidQueryException(reason: string): BadRequestExceptio
   });
 }
 
+export function catalogTimeZoneLockedByDeparturesException(): UnprocessableEntityException {
+  return new UnprocessableEntityException({
+    message: 'Product time zone cannot be changed while scheduled departures exist.',
+    i18nKey: 'catalog.product.timeZoneHasDepartures',
+    errorCode: 'catalog.product.timeZoneHasDepartures',
+  });
+}
+
 export function catalogPublishBlockedException(params: {
   supplierSuspended: boolean;
   missingLocales: readonly string[];

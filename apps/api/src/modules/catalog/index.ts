@@ -8,6 +8,7 @@ export {
   catalogPublishBlockedException,
   catalogSlugConflictException,
   catalogSupplierNotFoundException,
+  catalogTimeZoneLockedByDeparturesException,
 } from './catalog.errors.js';
 export { CatalogModule } from './catalog.module.js';
 export { CatalogService } from './catalog.service.js';

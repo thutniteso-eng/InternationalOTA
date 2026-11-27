@@ -18,9 +18,18 @@ import {
   uuidv7,
 } from '@internationalota/db';
 import { isValidTimeZone } from '@internationalota/time';
-import { Inject, Injectable } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  type OnModuleInit,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { LocaleService } from '../../common/i18n/locale.service.js';
 import { DRIZZLE_DB } from '../../database/database.module.js';
+import type { InventoryDepartureCheckPort } from '../inventory/index.js';
+import type { PricingSummaryPort } from '../pricing/index.js';
 import { SupplyService } from '../supply/index.js';
 import {
   catalogImagesInvalidUrlException,
@@ -32,6 +41,7 @@ import {
   catalogPublishBlockedException,
   catalogSlugConflictException,
   catalogSupplierNotFoundException,
+  catalogTimeZoneLockedByDeparturesException,
 } from './catalog.errors.js';
 import type {
   AdminCatalogProductDto,
@@ -248,12 +258,39 @@ interface PublicQueryRow {
 }
 
 @Injectable()
-export class CatalogService {
+export class CatalogService implements OnModuleInit {
+  private readonly logger = new Logger(CatalogService.name);
+  private inventoryService?: InventoryDepartureCheckPort;
+  private pricingService?: PricingSummaryPort;
+
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: DatabaseClient,
     private readonly supplyService: SupplyService,
     private readonly localeService: LocaleService,
+    private readonly moduleRef: ModuleRef,
   ) {}
+
+  onModuleInit(): void {
+    try {
+      this.inventoryService = this.moduleRef.get<InventoryDepartureCheckPort>(
+        'INVENTORY_DEPARTURE_CHECK_PORT',
+        { strict: false },
+      );
+    } catch (err) {
+      this.logger.warn(
+        `INVENTORY_DEPARTURE_CHECK_PORT is not bound; timeZone updates will fail closed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    try {
+      this.pricingService = this.moduleRef.get<PricingSummaryPort>('PRICING_SUMMARY_PORT', {
+        strict: false,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `PRICING_SUMMARY_PORT is not bound; product detail pricing summary will degrade to null: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
 
   private async assertCountryExists(rawAlpha2: string): Promise<string> {
     const code = typeof rawAlpha2 === 'string' ? rawAlpha2.trim().toUpperCase() : '';
@@ -461,7 +498,24 @@ export class CatalogService {
             missingTimeZone: true,
           });
         }
-        setValues['timeZone'] = this.assertTimeZone(rawTz as string);
+        const nextTz = this.assertTimeZone(rawTz as string);
+        if (nextTz !== existing.timeZone) {
+          if (!this.inventoryService) {
+            this.logger.error(
+              `Refusing timeZone change on product ${id}: INVENTORY_DEPARTURE_CHECK_PORT is unavailable`,
+            );
+            throw new ServiceUnavailableException({
+              message:
+                'Inventory departure verification service is unavailable; timeZone change refused.',
+              i18nKey: 'http.503.title',
+              errorCode: 'catalog.product.inventoryCheckUnavailable',
+            });
+          }
+          if (await this.inventoryService.hasDepartures(id, tx)) {
+            throw catalogTimeZoneLockedByDeparturesException();
+          }
+        }
+        setValues['timeZone'] = nextTz;
       }
       if (input.durationMinutes !== undefined) {
         if (input.durationMinutes === null) {
@@ -692,11 +746,15 @@ export class CatalogService {
     );
   }
 
-  async getProductInventoryTarget(id: string): Promise<CatalogInventoryTarget | null> {
+  async getProductInventoryTarget(
+    id: string,
+    tx?: Pick<DatabaseClient, 'select'>,
+  ): Promise<CatalogInventoryTarget | null> {
     if (!UUID_REGEX.test(id)) {
       return null;
     }
-    const [row] = await this.db
+    const runner = tx ?? this.db;
+    const baseQuery = runner
       .select({
         id: catalogProducts.id,
         kind: catalogProducts.kind,
@@ -705,6 +763,8 @@ export class CatalogService {
       })
       .from(catalogProducts)
       .where(eq(catalogProducts.id, id));
+
+    const [row] = tx ? await baseQuery.for('share') : await baseQuery;
 
     if (!row) {
       return null;
@@ -1145,6 +1205,10 @@ export class CatalogService {
       alt: pickLocalizedAlt(img.alt, locale),
     }));
 
+    const pricingSummary = this.pricingService
+      ? await this.pricingService.getPublicProductSummaryPricing(row.id, row.timeZone, locale)
+      : { fromPrice: null, cancellationSummary: null };
+
     return {
       id: row.id,
       kind: row.kind as ProductKind,
@@ -1166,6 +1230,8 @@ export class CatalogService {
       inclusions: row.inclusions,
       exclusions: row.exclusions,
       images,
+      fromPrice: pricingSummary.fromPrice,
+      cancellationSummary: pricingSummary.cancellationSummary,
     };
   }
 }
