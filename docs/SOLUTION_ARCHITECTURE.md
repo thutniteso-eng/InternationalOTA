@@ -45,3 +45,6 @@ Rules: modules talk via public service interfaces or domain events (transactiona
 | Storage | S3-compatible | Agree |
 | Observability | OpenTelemetry + structured logs | Agree |
 | Hosting | Single VPS/managed Postgres for MVP, Docker Compose; IaC later | Low cost, owner-controlled |
+
+## Cross-module ports (added 2026-11-27, P2-03)
+Module dependencies must stay acyclic (`pricing → inventory → catalog → supply`). When a lower module needs a read from a higher one (e.g. catalog asking inventory `hasDepartures`, or pricing summary), the higher module exports a narrow port under a string token (`INVENTORY_DEPARTURE_CHECK_PORT`, `PRICING_SUMMARY_PORT`) and the lower module resolves it via `ModuleRef` in `onModuleInit`. Rules: the port type lives in the providing module's `index.ts`; **safety checks fail closed** when the port is missing (503 + error log); purely presentational reads may degrade to `null` with a boot warning; ports that participate in a locking protocol accept the caller's `tx`.
