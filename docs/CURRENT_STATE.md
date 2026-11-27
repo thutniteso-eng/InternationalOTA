@@ -38,4 +38,5 @@ D-018: verified email required before payment. D-020: external integrations via 
 | P2-09A Demo 1: demo loader + customer browse web (D-021) | MERGED #34 (UI polish U1–U4 deferred) |
 | P2-04 Booking aggregate / holds | MERGED #36 (after R1 core-column lock) |
 | P2-05 Checkout saga + Mock payment gateway (D-022) | MERGED #38 (after R1 currency-mismatch test) |
-| P2-07 Cancellation & refunds (Mock) | READY — spec in implementation/tasks |
+| P2-07 Cancellation & refunds (Mock) | MERGED #40 |
+| P2-08 Email notifications (SMTP + Mailpit, D-023) | READY — spec in implementation/tasks |

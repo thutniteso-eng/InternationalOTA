@@ -31,3 +31,4 @@
 - 2026-11-27: P2-09A merged (PR #34); Owner viewed Demo 1 on staging. Added TASK-P2-04 spec (booking aggregate, DB-guarded state machine, expiring holds).
 - 2026-11-27: Owner asked Claude to drive Antigravity directly (via desktop control) and poll every 15 min. P2-04 merged (PR #36) after R1. D-022 merges P2-05/P2-06; added TASK-P2-05 spec.
 - 2026-11-27: P2-05 merged (PR #38). Added TASK-P2-07 spec (cancel after confirmation, refunds via Mock, departure cancellation, neutral retained-amount account pending D-004).
+- 2026-11-27: P2-07 merged (PR #40, accepted first pass). D-023 (nodemailer). Added TASK-P2-08 spec (email notifications, Mailpit, U1 wording fix).
