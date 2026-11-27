@@ -36,4 +36,5 @@ D-018: verified email required before payment. D-020: external integrations via 
 | P2-02 Dated inventory (departures, DB-enforced capacity) | MERGED #29 (L1 tz change → P2-03; L2–L5 documented on PR) |
 | P2-03 Pricing & cancellation policy (versioned, snapshot) | MERGED #31 (after R1 item-append, R2 fail-open port, R3 tz/generation race) |
 | P2-09A Demo 1: demo loader + customer browse web (D-021) | MERGED #34 (UI polish U1–U4 deferred) |
-| P2-04 Booking aggregate / holds | READY — spec in implementation/tasks |
+| P2-04 Booking aggregate / holds | MERGED #36 (after R1 core-column lock) |
+| P2-05 Checkout saga + Mock payment gateway (D-022) | READY — spec in implementation/tasks |
