@@ -1,23 +1,29 @@
-import { formatMoney, t, type BuiltinLocale } from '@internationalota/i18n';
-import { assertSupportedCurrency, createMoney } from '@internationalota/money';
-import type { PublicQuoteResponse } from '@/lib/catalog-api';
-
-function formatExactMinor(minorStr: string, currencyRaw: string, locale: BuiltinLocale): string {
-  assertSupportedCurrency(currencyRaw);
-  return formatMoney(createMoney(BigInt(minorStr), currencyRaw), locale);
-}
+import { t, type BuiltinLocale } from '@internationalota/i18n';
+import {
+  formatExactMinor,
+  formatPaxStepperLabel,
+  type PublicQuoteWithBands,
+} from '@/lib/booking-api';
 
 export function QuoteSummaryPanel({
   locale,
   quote,
   errorMessage,
   isLoading,
+  canBook = false,
+  bookLoading = false,
+  onBookClick,
 }: {
   readonly locale: BuiltinLocale;
-  readonly quote: PublicQuoteResponse | null;
+  readonly quote: PublicQuoteWithBands | null;
   readonly errorMessage: string | null;
   readonly isLoading: boolean;
+  readonly canBook?: boolean;
+  readonly bookLoading?: boolean;
+  readonly onBookClick?: () => void;
 }): React.JSX.Element {
+  const isButtonEnabled = Boolean(canBook && quote && !isLoading && !bookLoading && onBookClick);
+
   return (
     <div aria-live="polite">
       {isLoading ? <p className="resultMeta">{t(locale, 'demo.detail.quoteLoading')}</p> : null}
@@ -34,7 +40,7 @@ export function QuoteSummaryPanel({
             <div key={line.paxType} className="quoteLineRow">
               <span>
                 {t(locale, 'demo.detail.quoteLine', {
-                  paxLabel: t(locale, `demo.detail.pax.${line.paxType}`),
+                  paxLabel: formatPaxStepperLabel(line.paxType, locale, quote.ageBands),
                   quantity: line.quantity,
                 })}
               </span>
@@ -59,8 +65,13 @@ export function QuoteSummaryPanel({
         </div>
       ) : null}
 
-      <button type="button" disabled className="primaryButton bookButton">
-        {t(locale, 'demo.detail.bookButtonComingSoon')}
+      <button
+        type="button"
+        disabled={!isButtonEnabled}
+        onClick={onBookClick}
+        className="primaryButton bookButton"
+      >
+        {bookLoading ? t(locale, 'demo.auth.submitting') : t(locale, 'demo.detail.bookNowButton')}
       </button>
     </div>
   );

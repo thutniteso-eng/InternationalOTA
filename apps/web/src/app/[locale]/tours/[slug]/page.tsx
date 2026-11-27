@@ -222,6 +222,7 @@ export default async function TourDetailPage({
 
           <TourAvailabilityQuote
             productId={product.id}
+            productSlug={slug}
             locale={locale}
             timeZone={product.timeZone}
             initialFromDate={windowInfo.fromDate}

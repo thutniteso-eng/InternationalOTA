@@ -503,6 +503,29 @@ describe('Cancellation after confirmation & refund execution (P2-07)', () => {
     const realNow = Date.now();
     const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(realNow + 100 * 3_600_000);
     try {
+      const preview72 = await fetch(
+        `${baseUrl}/bookings/${b72.hold.reference}/cancellation-preview`,
+        {
+          headers: { Cookie: customerACookie },
+        },
+      );
+      expect(preview72.status).toBe(200);
+      expect(await preview72.json()).toEqual({
+        status: 'confirmed',
+        currency: 'VND',
+        totalAmountMinor: '1000001',
+        refundAmountMinor: '1000001',
+        refundPercent: 100,
+        ruleApplied: { hoursBeforeStart: 48, refundPercent: 100 },
+        cancellable: true,
+      });
+
+      const crossPreview = await fetch(
+        `${baseUrl}/bookings/${b72.hold.reference}/cancellation-preview`,
+        { headers: { Cookie: customerBCookie } },
+      );
+      expect(crossPreview.status).toBe(404);
+
       const res72 = await fetch(`${baseUrl}/bookings/${b72.hold.reference}/cancel`, {
         method: 'POST',
         headers: { Cookie: customerACookie, 'Idempotency-Key': nextIdemKey() },
@@ -528,6 +551,23 @@ describe('Cancellation after confirmation & refund execution (P2-07)', () => {
     });
     const b30 = await createAndConfirmBooking(customerACookie, dep30, q30);
     await setDepartureOffsetFromNow(dep30, 30);
+
+    const preview30 = await fetch(
+      `${baseUrl}/bookings/${b30.hold.reference}/cancellation-preview`,
+      {
+        headers: { Cookie: customerACookie },
+      },
+    );
+    expect(preview30.status).toBe(200);
+    expect(await preview30.json()).toEqual({
+      status: 'confirmed',
+      currency: 'VND',
+      totalAmountMinor: '1000001',
+      refundAmountMinor: '500000',
+      refundPercent: 50,
+      ruleApplied: { hoursBeforeStart: 24, refundPercent: 50 },
+      cancellable: true,
+    });
 
     const res30 = await fetch(`${baseUrl}/bookings/${b30.hold.reference}/cancel`, {
       method: 'POST',
@@ -581,6 +621,64 @@ describe('Cancellation after confirmation & refund execution (P2-07)', () => {
     });
     const bPast = await createAndConfirmBooking(customerACookie, depPast, qPast);
     await setDepartureOffsetFromNow(depPast, -1);
+
+    const previewPast = await fetch(
+      `${baseUrl}/bookings/${bPast.hold.reference}/cancellation-preview`,
+      { headers: { Cookie: customerACookie } },
+    );
+    expect(previewPast.status).toBe(200);
+    expect(await previewPast.json()).toEqual({
+      status: 'confirmed',
+      currency: 'VND',
+      totalAmountMinor: '1000001',
+      refundAmountMinor: '0',
+      refundPercent: 0,
+      ruleApplied: null,
+      cancellable: false,
+      reason: 'too_late_to_cancel',
+    });
+
+    // Held (not paid) booking preview -> not_paid
+    const { departureId: depHold, quote: qHold } = await createTourWithPolicyAndDeparture({
+      prefix: 'AC1-HoldPreview',
+      slugSuffix: 'ac1-hold-preview',
+      capacity: 10,
+      adultPrice: '1000001',
+    });
+    const holdPreviewRes = await fetch(`${baseUrl}/bookings`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: customerACookie,
+        'Idempotency-Key': nextIdemKey(),
+      },
+      body: JSON.stringify({
+        departureId: depHold,
+        pax: { adult: 1, child: 0, infant: 0 },
+        contact: {
+          name: 'Hold Preview',
+          email: 'hold-preview@example.com',
+          phone: '+84901234567',
+          locale: 'vi',
+        },
+        expectedSnapshotHash: qHold.snapshotHash,
+      }),
+    });
+    expect(holdPreviewRes.status).toBe(201);
+    const holdPreviewBooking = (await holdPreviewRes.json()) as HoldBookingResponseDto;
+    const previewHeld = await fetch(
+      `${baseUrl}/bookings/${holdPreviewBooking.reference}/cancellation-preview`,
+      { headers: { Cookie: customerACookie } },
+    );
+    expect(previewHeld.status).toBe(200);
+    expect(await previewHeld.json()).toEqual({
+      status: 'held',
+      currency: 'VND',
+      totalAmountMinor: holdPreviewBooking.totalAmountMinor,
+      refundAmountMinor: '0',
+      cancellable: true,
+      reason: 'not_paid',
+    });
 
     const resPast = await fetch(`${baseUrl}/bookings/${bPast.hold.reference}/cancel`, {
       method: 'POST',

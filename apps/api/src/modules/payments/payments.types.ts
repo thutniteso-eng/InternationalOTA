@@ -113,6 +113,20 @@ export interface DepartureCancelResultDto {
   readonly totalBookingsMatched: number;
 }
 
+export interface BookingCancellationPreviewDto {
+  readonly status: string;
+  readonly currency: string;
+  readonly totalAmountMinor: string;
+  readonly refundAmountMinor: string;
+  readonly refundPercent?: number;
+  readonly ruleApplied?: {
+    readonly hoursBeforeStart: number;
+    readonly refundPercent: number;
+  } | null;
+  readonly cancellable: boolean;
+  readonly reason?: 'not_paid' | 'too_late_to_cancel' | 'already_cancelled' | 'not_cancellable';
+}
+
 export interface DepartureCancellationSummaryDto {
   readonly departureId: string;
   readonly departureStatus: string;

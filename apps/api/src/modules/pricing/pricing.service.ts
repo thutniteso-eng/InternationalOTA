@@ -49,6 +49,7 @@ import type {
   PriceListItemDto,
   PublicCancellationSummaryDto,
   PublicFromPriceDto,
+  PublicPaxAgeBandDto,
   PublicProductPricingSummary,
   PublicQuoteLineDto,
   PublicQuoteResponse,
@@ -725,6 +726,26 @@ export class PricingService {
       resolvedLocale,
     );
 
+    const priceListItems = await this.db
+      .select({
+        paxType: pricingPriceListItems.paxType,
+        minAge: pricingPriceListItems.minAge,
+        maxAge: pricingPriceListItems.maxAge,
+        occupiesSeat: pricingPriceListItems.occupiesSeat,
+      })
+      .from(pricingPriceListItems)
+      .where(eq(pricingPriceListItems.priceListId, s.priceListId));
+
+    const paxOrder: Readonly<Record<PaxType, number>> = { adult: 0, child: 1, infant: 2 };
+    const ageBands: PublicPaxAgeBandDto[] = priceListItems
+      .map((item) => ({
+        paxType: item.paxType as PaxType,
+        minAge: item.minAge,
+        maxAge: item.maxAge,
+        occupiesSeat: item.occupiesSeat,
+      }))
+      .sort((a, b) => paxOrder[a.paxType] - paxOrder[b.paxType]);
+
     return {
       locale: resolvedLocale,
       data: {
@@ -735,6 +756,7 @@ export class PricingService {
         locale: resolvedLocale,
         currency: s.currency,
         lines: publicLines,
+        ageBands,
         totalAmountMinor: s.totalAmountMinor,
         totalFormatted,
         seats: s.seats,

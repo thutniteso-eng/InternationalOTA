@@ -45,6 +45,7 @@ import {
 } from './payments.errors.js';
 import type {
   AdminRefundDto,
+  BookingCancellationPreviewDto,
   DepartureCancellationSummaryDto,
   DepartureCancelResultDto,
   RefundVerificationResult,
@@ -124,6 +125,74 @@ export class RefundService
     this.outboxService.registerHandler('payment.refund_required', async (event) => {
       await this.handlePaymentRefundRequiredEvent(event);
     });
+  }
+
+  /**
+   * Read-only preview of customer cancellation outcome evaluated against DB `now()`.
+   */
+  async previewCancellation(
+    rawReference: string,
+    customerUserId: string,
+  ): Promise<BookingCancellationPreviewDto> {
+    const booking = await this.bookingService.getBookingForCustomerByReference(
+      rawReference,
+      customerUserId,
+    );
+
+    if (booking.status === 'held' || booking.status === 'payment_pending') {
+      return {
+        status: booking.status,
+        currency: booking.currency.trim(),
+        totalAmountMinor: booking.totalAmountMinor,
+        refundAmountMinor: '0',
+        cancellable: true,
+        reason: 'not_paid',
+      };
+    }
+
+    if (booking.status !== 'confirmed') {
+      return {
+        status: booking.status,
+        currency: booking.currency.trim(),
+        totalAmountMinor: booking.totalAmountMinor,
+        refundAmountMinor: '0',
+        cancellable: false,
+        reason: booking.status === 'cancelled' ? 'already_cancelled' : 'not_cancellable',
+      };
+    }
+
+    const timing = await this.inventoryService.getDepartureStartsAtWithDbNow(booking.departureId);
+    if (!timing || timing.dbNow.getTime() > timing.startsAt.getTime()) {
+      return {
+        status: booking.status,
+        currency: booking.currency.trim(),
+        totalAmountMinor: booking.totalAmountMinor,
+        refundAmountMinor: '0',
+        refundPercent: 0,
+        ruleApplied: null,
+        cancellable: false,
+        reason: 'too_late_to_cancel',
+      };
+    }
+
+    const currency = booking.currency.trim() as CurrencyCode;
+    const calc = computeRefund({
+      paidAmountMinor: BigInt(booking.totalAmountMinor),
+      currency,
+      rules: booking.quoteSnapshot.rules,
+      startsAt: timing.startsAt,
+      cancelledAt: timing.dbNow,
+    });
+
+    return {
+      status: booking.status,
+      currency,
+      totalAmountMinor: booking.totalAmountMinor,
+      refundAmountMinor: calc.refundAmountMinor.toString(),
+      refundPercent: calc.refundPercent,
+      ruleApplied: calc.ruleApplied,
+      cancellable: true,
+    };
   }
 
   /**

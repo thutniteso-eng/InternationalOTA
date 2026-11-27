@@ -136,6 +136,13 @@ export interface PublicQuoteLineDto {
   readonly lineFormatted: string;
 }
 
+export interface PublicPaxAgeBandDto {
+  readonly paxType: PaxType;
+  readonly minAge: number;
+  readonly maxAge: number | null;
+  readonly occupiesSeat: boolean;
+}
+
 export interface PublicQuoteResponse {
   readonly productId: string;
   readonly departureId: string;
@@ -144,6 +151,7 @@ export interface PublicQuoteResponse {
   readonly locale: string;
   readonly currency: CurrencyCode;
   readonly lines: readonly PublicQuoteLineDto[];
+  readonly ageBands?: readonly PublicPaxAgeBandDto[];
   readonly totalAmountMinor: string;
   readonly totalFormatted: string;
   readonly seats: number;

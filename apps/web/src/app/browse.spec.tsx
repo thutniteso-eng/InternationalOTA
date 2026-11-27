@@ -125,7 +125,7 @@ describe('Customer Browse Web (P2-09A)', () => {
     vi.restoreAllMocks();
   });
 
-  it('AC2: QuoteSummaryPanel displays API-matching 2.550.000 ₫ (vi) and ₫2,550,000 (en) with disabled Book button', () => {
+  it('AC2: QuoteSummaryPanel displays API-matching 2.550.000 ₫ (vi) and ₫2,550,000 (en) with Book now button', () => {
     const sampleQuote: PublicQuoteResponse = {
       productId: SAMPLE_DETAIL_VI.id,
       departureId: '01950000-0000-7000-8000-000000000901',
@@ -176,13 +176,20 @@ describe('Customer Browse Web (P2-09A)', () => {
     expect(htmlVi.replace(/\u00a0/g, ' ')).toContain('2.550.000 ₫');
     expect(htmlVi).toContain('Số chỗ giữ: 3');
     expect(htmlVi).toContain('disabled=""');
-    expect(htmlVi).toContain('Đặt chỗ sắp ra mắt');
+    expect(htmlVi).toContain('Đặt tour');
 
     const htmlEn = renderToStaticMarkup(
-      <QuoteSummaryPanel locale="en" quote={sampleQuote} errorMessage={null} isLoading={false} />,
+      <QuoteSummaryPanel
+        locale="en"
+        quote={sampleQuote}
+        errorMessage={null}
+        isLoading={false}
+        canBook
+        onBookClick={() => {}}
+      />,
     );
     expect(htmlEn).toContain('₫2,550,000');
-    expect(htmlEn).toContain('Booking coming soon');
+    expect(htmlEn).toContain('Book now');
   });
 
   it('AC3 & AC4 & AC5 & AC6: SSR list/detail render DEMO banner, search results, 37 remaining seats, and alternate locale links', async () => {

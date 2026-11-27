@@ -815,6 +815,10 @@ describe('Pricing & Cancellation Policy integration tests (P2-03)', () => {
     expect(quoteVi.cancellationPolicyVersion).toBe(1);
     expect(quoteVi.totalFormatted).toContain('950.000');
     expect(quoteVi.totalFormatted).toContain('₫');
+    expect(quoteVi.ageBands).toEqual([
+      { paxType: 'adult', minAge: 10, maxAge: null, occupiesSeat: true },
+      { paxType: 'child', minAge: 5, maxAge: 9, occupiesSeat: true },
+    ]);
 
     const quoteEnRes = await fetch(
       `${baseUrl}/catalog/products/${tour.productId}/quote?departureId=${dep5}&adult=1&locale=en`,
