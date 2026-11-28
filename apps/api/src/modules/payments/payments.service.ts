@@ -16,6 +16,7 @@ import { type CurrencyCode, createMoney } from '@internationalota/money';
 import { type ReconciliationFinding, resolveAppEnv } from '@internationalota/shared';
 import { parseLocalDate } from '@internationalota/time';
 import { Inject, Injectable, Logger, type OnModuleInit, Optional } from '@nestjs/common';
+import { FaultInjector } from '../../common/fault-injection/index.js';
 import { DRIZZLE_DB } from '../../database/database.module.js';
 import {
   type BookingAdminPaymentPort,
@@ -218,6 +219,7 @@ export class PaymentsService
     private readonly mockProvider: MockPaymentProvider,
     private readonly refundService: RefundService,
     @Optional() private readonly jobQueueService?: JobQueueService,
+    @Optional() @Inject(FaultInjector) private readonly faultInjector?: FaultInjector,
   ) {}
 
   onModuleInit(): void {
@@ -310,6 +312,8 @@ export class PaymentsService
       return { attempt, booking, returnUrl };
     });
 
+    this.faultInjector?.maybeFail('checkout.after_tx1');
+
     // External provider call OUTSIDE any DB transaction (10s timeout)
     let checkoutOutput: { providerRef: string; redirectUrl: string };
     try {
@@ -333,6 +337,8 @@ export class PaymentsService
       );
       throw paymentProviderUnavailableException();
     }
+
+    this.faultInjector?.maybeFail('checkout.after_provider_before_tx2');
 
     // Tx2: persist provider_ref + enqueue outbox payment.initiated
     await this.db.transaction(async (tx) => {
@@ -619,6 +625,8 @@ export class PaymentsService
           ),
         );
 
+      this.faultInjector?.maybeFail('confirm.after_booking_update_before_ledger');
+
       const prepaymentsAccount = await this.ledgerService.ensureAccount(tx, {
         code: `liability:customer_prepayments:${attemptCurrency}`,
         name: `Customer Prepayments (${attemptCurrency})`,
@@ -767,15 +775,28 @@ export class PaymentsService
     for (const candidate of candidates) {
       checkedCount += 1;
 
-      if (!candidate.providerRef) {
-        const didExpire = await this.expireAttemptIfOlderThan(candidate.id, expireMinutes);
-        if (didExpire) {
-          expiredCount += 1;
+      const provider = this.registry.get(candidate.provider);
+      let resolvedProviderRef = candidate.providerRef;
+
+      if (!resolvedProviderRef) {
+        const existingCheckout = provider?.getCheckoutByAttemptId
+          ? await provider.getCheckoutByAttemptId(candidate.id)
+          : null;
+        if (existingCheckout) {
+          resolvedProviderRef = await this.recoverAttemptProviderRef(
+            candidate.id,
+            existingCheckout.providerRef,
+          );
         }
-        continue;
+        if (!resolvedProviderRef) {
+          const didExpire = await this.expireAttemptIfOlderThan(candidate.id, expireMinutes);
+          if (didExpire) {
+            expiredCount += 1;
+          }
+          continue;
+        }
       }
 
-      const provider = this.registry.get(candidate.provider);
       if (!provider) {
         continue;
       }
@@ -783,7 +804,7 @@ export class PaymentsService
       let remoteStatus: PaymentVerificationResult | 'pending';
       try {
         remoteStatus = await withTimeout(
-          provider.getStatus(candidate.providerRef),
+          provider.getStatus(resolvedProviderRef),
           CHECKOUT_TIMEOUT_MS,
           `${provider.provider}.getStatus`,
         );
@@ -826,6 +847,61 @@ export class PaymentsService
     }
 
     return { checkedCount, resolvedCount, expiredCount };
+  }
+
+  private async recoverAttemptProviderRef(
+    attemptId: string,
+    providerRef: string,
+  ): Promise<string | null> {
+    return this.db.transaction(async (tx) => {
+      const [locked] = await tx
+        .select()
+        .from(paymentsPaymentAttempts)
+        .where(eq(paymentsPaymentAttempts.id, attemptId))
+        .for('update');
+
+      if (!locked || locked.status !== 'initiated') {
+        return null;
+      }
+      if (locked.providerRef) {
+        return locked.providerRef;
+      }
+
+      const [updated] = await tx
+        .update(paymentsPaymentAttempts)
+        .set({
+          providerRef,
+          version: locked.version + 1,
+        })
+        .where(
+          and(
+            eq(paymentsPaymentAttempts.id, locked.id),
+            eq(paymentsPaymentAttempts.version, locked.version),
+          ),
+        )
+        .returning();
+
+      if (!updated) {
+        return null;
+      }
+
+      await this.outboxService.enqueue(tx, {
+        aggregateType: 'payment_attempt',
+        aggregateId: updated.id,
+        eventType: 'payment.initiated',
+        payload: {
+          attemptId: updated.id,
+          bookingId: updated.bookingId,
+          provider: updated.provider,
+          providerRef: updated.providerRef,
+          amountMinor: updated.amountMinor.toString(),
+          currency: updated.currency.trim(),
+          recoveredBy: 'reconciliation',
+        },
+      });
+
+      return updated.providerRef;
+    });
   }
 
   private async expireAttemptIfOlderThan(

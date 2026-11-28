@@ -60,6 +60,7 @@ export type AdminAuditAction =
   | 'departure_close'
   | 'departure_reopen'
   | 'departure_cancel'
+  | 'booking_reject'
   | 'reconciliation_run'
   | 'admin_role_grant';
 

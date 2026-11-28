@@ -250,4 +250,15 @@ describe('Database foundation integration tests', () => {
       expect(finalRes.rows[0]?.value).toEqual({ counter: 11 });
     });
   });
+
+  describe('package exports hygiene (P2-11)', () => {
+    it('does not expose test DB helpers from @internationalota/db runtime entry', async () => {
+      const runtimeMod = (await import('../src/index.ts')) as Record<string, unknown>;
+      const testingMod = (await import('../src/test-database.ts')) as Record<string, unknown>;
+      expect(runtimeMod['createIsolatedTestDatabase']).toBeUndefined();
+      expect(runtimeMod['attachTestPoolErrorGuard']).toBeUndefined();
+      expect(typeof testingMod['createIsolatedTestDatabase']).toBe('function');
+      expect(typeof testingMod['attachTestPoolErrorGuard']).toBe('function');
+    });
+  });
 });

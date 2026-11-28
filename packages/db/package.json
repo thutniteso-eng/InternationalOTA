@@ -15,6 +15,11 @@
       "types": "./dist/schema/index.d.ts",
       "import": "./dist/schema/index.js",
       "default": "./dist/schema/index.js"
+    },
+    "./testing": {
+      "types": "./dist/test-database.d.ts",
+      "import": "./dist/test-database.js",
+      "default": "./dist/test-database.js"
     }
   },
   "scripts": {

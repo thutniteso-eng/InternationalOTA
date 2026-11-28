@@ -311,16 +311,23 @@ export class EmailTemplateRenderer {
       tourTitle,
     });
     const greeting = t(locale, 'notifications.email.greeting', { name: booking.contactName });
+    const isSupplierRejected = Boolean(ctx.cancellationReason?.startsWith('supplier_rejected:'));
     const introBody =
-      refundMinor > 0n
-        ? t(locale, 'notifications.email.cancelled.introWithRefund', {
+      isSupplierRejected && refundMinor > 0n
+        ? t(locale, 'notifications.email.cancelled.introSupplierRejected', {
             reference: booking.reference,
             percent,
             refundAmount: refundFormatted,
           })
-        : t(locale, 'notifications.email.cancelled.introNoRefund', {
-            reference: booking.reference,
-          });
+        : refundMinor > 0n
+          ? t(locale, 'notifications.email.cancelled.introWithRefund', {
+              reference: booking.reference,
+              percent,
+              refundAmount: refundFormatted,
+            })
+          : t(locale, 'notifications.email.cancelled.introNoRefund', {
+              reference: booking.reference,
+            });
     const intro = `${greeting} ${introBody}`;
 
     const rows = [

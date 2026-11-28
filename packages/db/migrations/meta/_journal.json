@@ -155,6 +155,13 @@
       "when": 1795830568368,
       "tag": "0021_cooing_marauders",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1795858091415,
+      "tag": "0022_silly_mathemanic",
+      "breakpoints": true
     }
   ]
 }

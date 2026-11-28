@@ -6,7 +6,9 @@ import {
   eq,
   getTableColumns,
   inArray,
+  isNull,
   lte,
+  or,
   type OutboxEvent,
   paymentsPaymentAttempts,
   paymentsRefunds,
@@ -20,10 +22,12 @@ import { ADMIN_AUDIT_PORT, type AdminAuditRecordInput } from '@internationalota/
 import { parseLocalDate } from '@internationalota/time';
 import { Inject, Injectable, Logger, type OnModuleInit, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
+import { FaultInjector, SimulatedCrash } from '../../common/fault-injection/index.js';
 import { getRequestId } from '../../common/observability/request-context.js';
 import { requireAdminAuditPort } from '../../common/ports/admin-audit.helper.js';
 import { DRIZZLE_DB } from '../../database/database.module.js';
 import {
+  bookingConflictException,
   bookingInvalidQueryException,
   bookingNotCancellableException,
   bookingNotFoundException,
@@ -57,11 +61,13 @@ import type {
   DepartureCancellationSummaryDto,
   DepartureCancelResultDto,
   RefundVerificationResult,
+  RejectBookingResultDto,
 } from './payments.types.js';
 
 const MAX_REFUND_ATTEMPTS = 3;
 const REFUND_BASE_BACKOFF_MS = 1000;
 const REFUND_EXECUTOR_BATCH_LIMIT = 50;
+const DEFAULT_STALE_PROCESSING_SECONDS = 120;
 const PROVIDER_CALL_TIMEOUT_MS = 10_000;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -133,6 +139,7 @@ export class RefundService
     private readonly registry: PaymentProviderRegistry,
     @Optional() private readonly jobQueueService?: JobQueueService,
     @Optional() private readonly moduleRef?: ModuleRef,
+    @Optional() @Inject(FaultInjector) private readonly faultInjector?: FaultInjector,
   ) {}
 
   onModuleInit(): void {
@@ -529,6 +536,151 @@ export class RefundService
     return processed;
   }
 
+  private async cancelConfirmedAndQueueFullRefundInTx(
+    tx: DatabaseTransaction,
+    params: {
+      readonly bookingId: string;
+      readonly actor: string;
+      readonly bookingCancelReason: string;
+      readonly refundReason: Extract<RefundReason, 'departure_cancelled' | 'supplier_rejected'>;
+      readonly entryKind: 'departure_cancellation' | 'supplier_rejection';
+      readonly ledgerDescription: (reference: string) => string;
+      readonly ledgerMemoReason: string;
+    },
+  ): Promise<
+    | { readonly kind: 'not_found' }
+    | { readonly kind: 'already_cancelled' | 'not_confirmed' }
+    | {
+        readonly kind: 'cancelled';
+        readonly bookingId: string;
+        readonly bookingReference: string;
+        readonly refundId: string | null;
+        readonly refundStatus: string | null;
+        readonly refundAmountMinor: string;
+        readonly currency: string;
+      }
+  > {
+    const cancelRes = await this.bookingService.cancelConfirmedWithLock(params.bookingId, {
+      actor: params.actor,
+      reason: params.bookingCancelReason,
+      enforceBeforeStart: false,
+      tx,
+    });
+
+    if (cancelRes.kind === 'not_found') {
+      return { kind: 'not_found' };
+    }
+    if (cancelRes.kind === 'already_cancelled' || cancelRes.kind === 'not_confirmed') {
+      return { kind: cancelRes.kind };
+    }
+    if (cancelRes.kind !== 'cancelled') {
+      return { kind: 'not_confirmed' };
+    }
+
+    const booking = cancelRes.booking;
+    const paidMinor = BigInt(booking.totalAmountMinor);
+    const currency = booking.currency.trim() as CurrencyCode;
+
+    const [succeededAttempt] = await tx
+      .select()
+      .from(paymentsPaymentAttempts)
+      .where(
+        and(
+          eq(paymentsPaymentAttempts.bookingId, booking.id),
+          eq(paymentsPaymentAttempts.status, 'succeeded'),
+        ),
+      )
+      .limit(1);
+
+    if (!succeededAttempt) {
+      throw new Error(`No succeeded payment attempt found for confirmed booking ${booking.id}`);
+    }
+
+    let refundId: string | null = null;
+    let refundStatus: string | null = null;
+
+    if (paidMinor > 0n) {
+      const [insertedRefund] = await tx
+        .insert(paymentsRefunds)
+        .values({
+          bookingId: booking.id,
+          paymentAttemptId: succeededAttempt.id,
+          provider: succeededAttempt.provider,
+          amountMinor: paidMinor,
+          currency,
+          reason: params.refundReason,
+          status: 'requested',
+          attempts: 0,
+          version: 1,
+        })
+        .returning();
+
+      if (insertedRefund) {
+        refundId = insertedRefund.id;
+        refundStatus = insertedRefund.status;
+        await this.outboxService.enqueue(tx, {
+          aggregateType: 'refund',
+          aggregateId: insertedRefund.id,
+          eventType: 'refund.requested',
+          payload: {
+            refundId: insertedRefund.id,
+            bookingId: booking.id,
+            paymentAttemptId: succeededAttempt.id,
+            amountMinor: paidMinor.toString(),
+            currency,
+            reason: params.refundReason,
+          },
+        });
+      }
+
+      const effectiveDate = parseLocalDate(new Date().toISOString().slice(0, 10));
+      const prepaymentsAccount = await this.ledgerService.ensureAccount(tx, {
+        code: `liability:customer_prepayments:${currency}`,
+        name: `Customer Prepayments (${currency})`,
+        type: 'liability',
+        currency,
+      });
+      const refundsPayableAccount = await this.ledgerService.ensureAccount(tx, {
+        code: `liability:refunds_payable:${currency}`,
+        name: `Refunds Payable (${currency})`,
+        type: 'liability',
+        currency,
+      });
+
+      await this.ledgerService.post(tx, {
+        effectiveDate,
+        description: params.ledgerDescription(booking.reference),
+        sourceType: 'booking_cancellation',
+        sourceId: booking.id,
+        entryKind: params.entryKind,
+        lines: [
+          {
+            accountId: prepaymentsAccount.id,
+            side: 'debit',
+            amount: createMoney(paidMinor, currency),
+            memo: booking.reference,
+          },
+          {
+            accountId: refundsPayableAccount.id,
+            side: 'credit',
+            amount: createMoney(paidMinor, currency),
+            memo: params.ledgerMemoReason,
+          },
+        ],
+      });
+    }
+
+    return {
+      kind: 'cancelled',
+      bookingId: booking.id,
+      bookingReference: booking.reference,
+      refundId,
+      refundStatus,
+      refundAmountMinor: paidMinor.toString(),
+      currency,
+    };
+  }
+
   async executeDepartureBookingCancel(payload: Record<string, unknown>): Promise<void> {
     const bookingId = typeof payload['bookingId'] === 'string' ? payload['bookingId'] : '';
     const adminUserId = typeof payload['adminUserId'] === 'string' ? payload['adminUserId'] : '';
@@ -540,110 +692,99 @@ export class RefundService
     let createdRefundId: string | null = null;
 
     await this.db.transaction(async (tx) => {
-      const cancelRes = await this.bookingService.cancelConfirmedWithLock(bookingId, {
+      const outcome = await this.cancelConfirmedAndQueueFullRefundInTx(tx, {
+        bookingId,
         actor: `admin:${adminUserId}`,
-        reason: `departure_cancelled:${reason}`,
-        enforceBeforeStart: false,
-        tx,
+        bookingCancelReason: `departure_cancelled:${reason}`,
+        refundReason: 'departure_cancelled',
+        entryKind: 'departure_cancellation',
+        ledgerDescription: (ref) =>
+          `Operator departure cancellation 100% refund for booking ${ref}`,
+        ledgerMemoReason: reason,
       });
-
-      if (cancelRes.kind !== 'cancelled') {
-        return;
-      }
-
-      const booking = cancelRes.booking;
-      const paidMinor = BigInt(booking.totalAmountMinor);
-      const currency = booking.currency.trim() as CurrencyCode;
-
-      const [succeededAttempt] = await tx
-        .select()
-        .from(paymentsPaymentAttempts)
-        .where(
-          and(
-            eq(paymentsPaymentAttempts.bookingId, booking.id),
-            eq(paymentsPaymentAttempts.status, 'succeeded'),
-          ),
-        )
-        .limit(1);
-
-      if (!succeededAttempt) {
-        throw new Error(`No succeeded payment attempt found for confirmed booking ${booking.id}`);
-      }
-
-      if (paidMinor > 0n) {
-        const [insertedRefund] = await tx
-          .insert(paymentsRefunds)
-          .values({
-            bookingId: booking.id,
-            paymentAttemptId: succeededAttempt.id,
-            provider: succeededAttempt.provider,
-            amountMinor: paidMinor,
-            currency,
-            reason: 'departure_cancelled',
-            status: 'requested',
-            attempts: 0,
-            version: 1,
-          })
-          .returning();
-
-        if (insertedRefund) {
-          createdRefundId = insertedRefund.id;
-          await this.outboxService.enqueue(tx, {
-            aggregateType: 'refund',
-            aggregateId: insertedRefund.id,
-            eventType: 'refund.requested',
-            payload: {
-              refundId: insertedRefund.id,
-              bookingId: booking.id,
-              paymentAttemptId: succeededAttempt.id,
-              amountMinor: paidMinor.toString(),
-              currency,
-              reason: 'departure_cancelled',
-            },
-          });
-        }
-
-        const effectiveDate = parseLocalDate(new Date().toISOString().slice(0, 10));
-        const prepaymentsAccount = await this.ledgerService.ensureAccount(tx, {
-          code: `liability:customer_prepayments:${currency}`,
-          name: `Customer Prepayments (${currency})`,
-          type: 'liability',
-          currency,
-        });
-        const refundsPayableAccount = await this.ledgerService.ensureAccount(tx, {
-          code: `liability:refunds_payable:${currency}`,
-          name: `Refunds Payable (${currency})`,
-          type: 'liability',
-          currency,
-        });
-
-        await this.ledgerService.post(tx, {
-          effectiveDate,
-          description: `Operator departure cancellation 100% refund for booking ${booking.reference}`,
-          sourceType: 'booking_cancellation',
-          sourceId: booking.id,
-          entryKind: 'departure_cancellation',
-          lines: [
-            {
-              accountId: prepaymentsAccount.id,
-              side: 'debit',
-              amount: createMoney(paidMinor, currency),
-              memo: booking.reference,
-            },
-            {
-              accountId: refundsPayableAccount.id,
-              side: 'credit',
-              amount: createMoney(paidMinor, currency),
-              memo: reason,
-            },
-          ],
-        });
+      if (outcome.kind === 'cancelled') {
+        createdRefundId = outcome.refundId;
       }
     });
 
     if (createdRefundId) {
+      this.jobQueueService?.triggerOutboxRelayAsync();
       this.jobQueueService?.triggerRefundExecutorAsync();
     }
+  }
+
+  /**
+   * Admin/operator rejects a confirmed booking (e.g. supplier unavailable):
+   * confirmed -> cancelled, releases seats, creates 100% supplier_rejected refund,
+   * updates ledger, records fail-closed ops.admin_audit, and notifies customer.
+   */
+  async rejectConfirmedBooking(
+    rawReference: string,
+    adminUserId: string,
+    rawReason?: string,
+  ): Promise<RejectBookingResultDto> {
+    const trimmedReason = typeof rawReason === 'string' ? rawReason.trim() : '';
+    if (!trimmedReason) {
+      throw departureCancelReasonRequiredException();
+    }
+
+    const result = await this.db.transaction(async (tx) => {
+      const auditPort = requireAdminAuditPort(
+        this.adminAuditPort,
+        this.logger,
+        'booking_reject',
+        rawReference,
+      );
+
+      const bookingId = await this.bookingService.getBookingIdByReference(rawReference, tx);
+      if (!bookingId) {
+        throw bookingNotFoundException();
+      }
+
+      const outcome = await this.cancelConfirmedAndQueueFullRefundInTx(tx, {
+        bookingId,
+        actor: `admin:${adminUserId}`,
+        bookingCancelReason: `supplier_rejected:${trimmedReason}`,
+        refundReason: 'supplier_rejected',
+        entryKind: 'supplier_rejection',
+        ledgerDescription: (ref) => `Supplier rejection 100% refund for booking ${ref}`,
+        ledgerMemoReason: trimmedReason,
+      });
+
+      if (outcome.kind === 'not_found') {
+        throw bookingNotFoundException();
+      }
+      if (outcome.kind !== 'cancelled') {
+        throw bookingConflictException();
+      }
+
+      await auditPort.recordAudit(tx, {
+        actorUserId: adminUserId,
+        action: 'booking_reject',
+        targetType: 'booking',
+        targetId: outcome.bookingId,
+        reason: trimmedReason,
+        requestId: getRequestId() ?? null,
+      });
+
+      return outcome;
+    });
+
+    this.jobQueueService?.triggerOutboxRelayAsync();
+    if (result.refundId) {
+      this.jobQueueService?.triggerRefundExecutorAsync();
+    }
+
+    return {
+      bookingId: result.bookingId,
+      bookingReference: result.bookingReference,
+      bookingStatus: 'cancelled',
+      refundId: result.refundId,
+      refundStatus: result.refundStatus,
+      refundAmountMinor: result.refundAmountMinor,
+      currency: result.currency,
+      reason: trimmedReason,
+    };
   }
 
   async getDepartureCancellationSummary(
@@ -773,11 +914,13 @@ export class RefundService
    * transitions to `processing`, calls `provider.refund(...)` outside DB transactions, and
    * persists `providerRefundRef` or handles failure -> backoff / `manual_review` after 3 tries.
    */
-  async processDueRefunds(): Promise<{
+  async processDueRefunds(options?: { readonly staleProcessingSeconds?: number }): Promise<{
     readonly processedCount: number;
     readonly failedCount: number;
     readonly manualReviewCount: number;
   }> {
+    const staleProcessingSeconds =
+      options?.staleProcessingSeconds ?? DEFAULT_STALE_PROCESSING_SECONDS;
     let processedCount = 0;
     let failedCount = 0;
     let manualReviewCount = 0;
@@ -789,9 +932,19 @@ export class RefundService
           .select()
           .from(paymentsRefunds)
           .where(
-            and(
-              inArray(paymentsRefunds.status, ['requested', 'failed']),
-              lte(paymentsRefunds.nextAttemptAt, sql`now()`),
+            or(
+              and(
+                inArray(paymentsRefunds.status, ['requested', 'failed']),
+                lte(paymentsRefunds.nextAttemptAt, sql`now()`),
+              ),
+              and(
+                eq(paymentsRefunds.status, 'processing'),
+                isNull(paymentsRefunds.providerRefundRef),
+                lte(
+                  paymentsRefunds.updatedAt,
+                  sql`now() - (${staleProcessingSeconds} * interval '1 second')`,
+                ),
+              ),
             ),
           )
           .orderBy(paymentsRefunds.nextAttemptAt, paymentsRefunds.createdAt)
@@ -812,16 +965,42 @@ export class RefundService
           throw new Error(`Missing providerRef on payment attempt ${due.paymentAttemptId}`);
         }
 
+        let claimBaseVersion = due.version;
+        if (due.status === 'processing') {
+          await tx
+            .update(paymentsRefunds)
+            .set({
+              status: 'failed',
+              lastError: 'Interrupted while processing refund; reclaimed for retry',
+              nextAttemptAt: sql`now()`,
+              version: claimBaseVersion + 1,
+              updatedAt: sql`now()`,
+            })
+            .where(
+              and(eq(paymentsRefunds.id, due.id), eq(paymentsRefunds.version, claimBaseVersion)),
+            );
+          claimBaseVersion += 1;
+
+          if (due.attempts >= MAX_REFUND_ATTEMPTS) {
+            await this.handleRefundFailureInTx(
+              tx,
+              due.id,
+              'Interrupted while processing refund; max attempts reached',
+            );
+            return 'manual_review_reclaimed' as const;
+          }
+        }
+
         const nextAttempts = due.attempts + 1;
         const [updated] = await tx
           .update(paymentsRefunds)
           .set({
             status: 'processing',
             attempts: nextAttempts,
-            version: due.version + 1,
+            version: claimBaseVersion + 1,
             updatedAt: sql`now()`,
           })
-          .where(and(eq(paymentsRefunds.id, due.id), eq(paymentsRefunds.version, due.version)))
+          .where(and(eq(paymentsRefunds.id, due.id), eq(paymentsRefunds.version, claimBaseVersion)))
           .returning();
 
         if (!updated) {
@@ -831,9 +1010,15 @@ export class RefundService
         return { refund: updated, providerRef: attempt.providerRef };
       });
 
+      if (claimed === 'manual_review_reclaimed') {
+        manualReviewCount += 1;
+        continue;
+      }
       if (!claimed) {
         break;
       }
+
+      this.faultInjector?.maybeFail('refund.after_processing_before_provider');
 
       processedCount += 1;
       const provider = this.registry.get(claimed.refund.provider);
@@ -888,6 +1073,9 @@ export class RefundService
             );
         });
       } catch (err: unknown) {
+        if (err instanceof SimulatedCrash) {
+          throw err;
+        }
         const message = err instanceof Error ? err.message : String(err);
         const movedToManual = await this.db.transaction((tx) =>
           this.handleRefundFailureInTx(tx, claimed.refund.id, message),

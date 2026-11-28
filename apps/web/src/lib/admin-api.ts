@@ -168,6 +168,17 @@ export interface DepartureCancelResultDto {
   readonly totalBookingsMatched: number;
 }
 
+export interface RejectBookingResultDto {
+  readonly bookingId: string;
+  readonly bookingReference: string;
+  readonly bookingStatus: 'cancelled';
+  readonly refundId: string | null;
+  readonly refundStatus: string | null;
+  readonly refundAmountMinor: string;
+  readonly currency: string;
+  readonly reason: string;
+}
+
 export interface ReconciliationFindingDto {
   readonly id: string;
   readonly runId: string;

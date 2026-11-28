@@ -67,6 +67,12 @@ jobs:
       - name: Run tests
         run: pnpm test
 
+      - name: Failure scenarios
+        env:
+          APP_ENV: test
+          FAULT_INJECTION: '1'
+        run: pnpm test:failure-scenarios
+
       - name: Build
         run: pnpm build
 
