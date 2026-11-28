@@ -37,3 +37,4 @@
 - 2026-11-27: P2-09 merged (PR #45) — Demo 2 (sign-up → hold → Mock pay → confirmed → emails → cancel/refund) verified by e2e on staging. Added TASK-H-1 spec.
 - 2026-11-28: H-1 PR #47 rejected (R1 cursor precision; real bug surfaced by CI). Antigravity out of credits; Owner paused project. Handoff updated.
 - 2026-11-28: H-1 merged (PR #47) after R1 (booking cursor microsecond precision). Desktop control of Antigravity paused by Owner.
+- 2026-11-28: Added TASK-P2-10 spec (reconciliation + admin). Owner relays tasks manually again.
