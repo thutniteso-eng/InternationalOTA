@@ -656,6 +656,8 @@ describe('Transactional email notifications via SMTP adapter (P2-08)', () => {
     expect(heldViMail.text).toContain('2.550.000\u00a0₫'.replace('\u00a0', ' ').slice(0, 7));
     expect(heldViMail.text).toContain('2.550.000');
     expect(heldViMail.text).toContain('Asia/Ho_Chi_Minh');
+    expect(heldViMail.text).toContain('09:00');
+    expect(heldViMail.text).not.toContain('09:00:00');
     expect(heldViMail.text).toContain(
       `https://demo-web.internationalota.local/vi/bookings/${holdVi.reference}`,
     );
@@ -682,6 +684,8 @@ describe('Transactional email notifications via SMTP adapter (P2-08)', () => {
     expect(confirmedViMail.to).toEqual(['ac1-vi-pii@example.com']);
     expect(confirmedViMail.subject).toContain(holdVi.reference);
     expect(confirmedViMail.text).toContain('2.550.000');
+    expect(confirmedViMail.text).toContain('09:00');
+    expect(confirmedViMail.text).not.toContain('09:00:00');
     expect(confirmedViMail.text).toContain('Cảng An Thới');
     expect(confirmedViMail.text).toContain('Hủy từ 48 giờ trở lên trước giờ khởi hành: hoàn 100%.');
     expect(confirmedViMail.html).toContain('Hủy từ 48 giờ trở lên trước giờ khởi hành: hoàn 100%.');

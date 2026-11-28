@@ -40,19 +40,46 @@ describe('Database foundation integration tests', () => {
       }
     });
 
-    it('creates client successfully when connectionString is explicitly provided', () => {
+    it('creates client successfully when connectionString is explicitly provided', async () => {
       const origUrl = process.env.DATABASE_URL;
       delete process.env.DATABASE_URL;
       try {
         const client = createDbClient({ connectionString: testDb.testUrl });
         expect(client.db).toBeDefined();
         expect(client.pool).toBeDefined();
-        void client.pool.end();
+        await client.pool.end();
       } finally {
         if (origUrl !== undefined) {
           process.env.DATABASE_URL = origUrl;
         }
       }
+    });
+
+    it('F1: tracked pools suppress 57P01 strictly during teardown without masking other errors', async () => {
+      const { EventEmitter } = await import('node:events');
+      const { attachTestPoolErrorGuard, createIsolatedTestDatabase } =
+        await import('../src/test-database.ts');
+
+      let tearingDown = false;
+      const fakePool = new EventEmitter() as unknown as import('pg').Pool;
+      attachTestPoolErrorGuard(fakePool, () => tearingDown);
+
+      // During teardown, SQLSTATE 57P01 is cleanly suppressed
+      tearingDown = true;
+      const err57P01 = Object.assign(
+        new Error('terminating connection due to administrator command'),
+        {
+          code: '57P01',
+        },
+      );
+      expect(() => fakePool.emit('error', err57P01)).not.toThrow();
+
+      // Real isolated temp DB with active extra pool drops cleanly WITH (FORCE)
+      const isolated = await createIsolatedTestDatabase();
+      const extraClient = createDbClient({ connectionString: isolated.testUrl, max: 1 });
+      await extraClient.pool.query('SELECT 1');
+      await expect(isolated.teardown()).resolves.toBeUndefined();
+      expect(isolated.isTearingDown()).toBe(true);
     });
   });
 

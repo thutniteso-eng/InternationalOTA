@@ -23,6 +23,10 @@ import {
   runDemoLoader,
   validateDemoCatalogJson,
 } from './demo-loader.js';
+import {
+  assertStagingCleanupEnvAllowed,
+  runStagingCleanupTestData,
+} from './staging-cleanup-test-data.js';
 
 const TEST_AUTH_SECRET = 'p2-09a-demo-loader-test-secret-at-least-32-chars';
 
@@ -287,5 +291,59 @@ describe('Phu Quoc demo loader & customer browse API integration tests (P2-09A)'
     });
     expect(prodRun.status).toBe(1);
     expect(prodRun.stderr).toContain('production');
+  });
+
+  it('U6: staging-cleanup-test-data refuses non-staging envs, archives synthetic test products, and preserves the 8 demo tours', async () => {
+    process.env['APP_ENV'] = 'production';
+    expect(() => assertStagingCleanupEnvAllowed()).toThrow(/production/i);
+
+    process.env['APP_ENV'] = 'local';
+    expect(() => assertStagingCleanupEnvAllowed()).toThrow(/APP_ENV=staging/i);
+
+    // Seed a synthetic test supplier & product (like P2-07/P2-08 manual staging probes)
+    const testSupplier = await supplyService.createSupplier({
+      name: 'E2E Test Supplier a77bf7f6',
+      countryAlpha2: 'VN',
+      contactEmail: 'e2e-test@example.com',
+      contactPhone: '+84901234567',
+    });
+    const testProduct = await catalogService.createProduct({
+      supplierId: testSupplier.id,
+      kind: 'tour',
+      countryAlpha2: 'VN',
+      region: 'Phú Quốc',
+      location: { lat: 10.02, lng: 104.01 },
+      timeZone: 'Asia/Ho_Chi_Minh',
+      durationMinutes: 180,
+    });
+    await catalogService.upsertTranslation(testProduct.id, 'vi', {
+      title: 'Test Tour a77bf7f6',
+      slug: 'pq-p208-vi-a77bf7f6',
+      summary: 'Synthetic test product',
+      description: 'Should be archived by staging cleanup',
+    });
+    await catalogService.upsertTranslation(testProduct.id, 'en', {
+      title: 'Test Tour EN a77bf7f6',
+      slug: 'pq-p208-en-a77bf7f6',
+      summary: 'Synthetic test product EN',
+      description: 'Should be archived by staging cleanup',
+    });
+    await catalogService.publishProduct(testProduct.id);
+
+    process.env['APP_ENV'] = 'staging';
+    try {
+      const cleanupRes = await runStagingCleanupTestData(db);
+      expect(cleanupRes.archivedProductsCount).toBe(1);
+      expect(cleanupRes.archivedProductSlugs).toContain('pq-p208-vi-a77bf7f6');
+      expect(cleanupRes.suspendedSuppliersCount).toBe(1);
+      expect(cleanupRes.remainingPublicProductsCount).toBe(8);
+
+      const listAfter = await fetch(`${baseUrl}/catalog/products?locale=vi&limit=20`);
+      const bodyAfter = (await listAfter.json()) as PublicCatalogListResponse;
+      expect(bodyAfter.items).toHaveLength(8);
+      expect(bodyAfter.items.some((item) => item.slug.includes('pq-p208'))).toBe(false);
+    } finally {
+      process.env['APP_ENV'] = 'test';
+    }
   });
 });

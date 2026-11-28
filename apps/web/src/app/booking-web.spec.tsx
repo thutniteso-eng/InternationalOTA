@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { formatInstant } from '@internationalota/i18n';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthForm } from '@/components/AuthForm';
@@ -419,5 +420,14 @@ describe('Customer Booking Web (P2-09)', () => {
     );
     expect(bannerHtml).toContain('aria-live="polite"');
     expect(bannerHtml).toContain('Resend verification email');
+  });
+
+  it('U5: booking time display formats HH:mm without seconds in vi and en', () => {
+    const formattedVi = formatInstant('2026-11-28T01:00:00.000Z', 'vi', 'Asia/Ho_Chi_Minh');
+    const formattedEn = formatInstant('2026-11-28T01:00:00.000Z', 'en', 'Asia/Ho_Chi_Minh');
+    expect(formattedVi).toContain('08:00');
+    expect(formattedVi).not.toContain('08:00:00');
+    expect(formattedEn).toContain('08:00');
+    expect(formattedEn).not.toContain('08:00:00');
   });
 });

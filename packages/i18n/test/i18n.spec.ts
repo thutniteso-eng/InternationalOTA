@@ -157,11 +157,19 @@ describe('@internationalota/i18n', () => {
       expect(viStr).toContain('15');
     });
 
-    it('formats UTC instant in Asia/Ho_Chi_Minh (UTC+7)', () => {
-      const formatted = formatInstant('2026-06-15T10:30:00Z', 'en-GB', 'Asia/Ho_Chi_Minh');
-      expect(formatted).toContain('15');
-      expect(formatted).toContain('2026');
-      expect(formatted).toContain('17:30:00');
+    it('formats UTC instant in Asia/Ho_Chi_Minh (UTC+7) using HH:mm without seconds by default (U5)', () => {
+      const formattedEn = formatInstant('2026-11-28T01:00:00Z', 'en', 'Asia/Ho_Chi_Minh');
+      const formattedVi = formatInstant('2026-11-28T01:00:00Z', 'vi', 'Asia/Ho_Chi_Minh');
+      expect(formattedEn).toContain('08:00');
+      expect(formattedEn).not.toContain('08:00:00');
+      expect(formattedVi).toContain('08:00');
+      expect(formattedVi).not.toContain('08:00:00');
+      expect({ formattedEn, formattedVi }).toMatchInlineSnapshot(`
+        {
+          "formattedEn": "Nov 28, 2026, 08:00",
+          "formattedVi": "08:00 28 thg 11, 2026",
+        }
+      `);
     });
 
     it('formats UTC instants accurately across Europe/Berlin spring-forward DST change', () => {
@@ -169,8 +177,8 @@ describe('@internationalota/i18n', () => {
       const beforeDst = formatInstant('2026-03-29T00:30:00Z', 'en-GB', 'Europe/Berlin');
       const afterDst = formatInstant('2026-03-29T01:30:00Z', 'en-GB', 'Europe/Berlin');
 
-      expect(beforeDst).toContain('01:30:00'); // UTC+1 (CET)
-      expect(afterDst).toContain('03:30:00'); // UTC+2 (CEST)
+      expect(beforeDst).toContain('01:30'); // UTC+1 (CET)
+      expect(afterDst).toContain('03:30'); // UTC+2 (CEST)
     });
 
     it('formats UTC instants accurately across Europe/Berlin autumn fallback DST change', () => {
@@ -178,8 +186,8 @@ describe('@internationalota/i18n', () => {
       const beforeFallback = formatInstant('2026-10-25T00:30:00Z', 'en-GB', 'Europe/Berlin');
       const afterFallback = formatInstant('2026-10-25T01:30:00Z', 'en-GB', 'Europe/Berlin');
 
-      expect(beforeFallback).toContain('02:30:00'); // UTC+2 (CEST)
-      expect(afterFallback).toContain('02:30:00'); // UTC+1 (CET)
+      expect(beforeFallback).toContain('02:30'); // UTC+2 (CEST)
+      expect(afterFallback).toContain('02:30'); // UTC+1 (CET)
     });
   });
 });
