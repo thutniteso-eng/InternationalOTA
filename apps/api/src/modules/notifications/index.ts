@@ -12,6 +12,8 @@ export { NotificationsEmailSender } from './notifications-email-sender.service.j
 export { NotificationsModule } from './notifications.module.js';
 export { NotificationsService } from './notifications.service.js';
 export type {
+  AdminBookingEmailSummary,
+  BookingAdminNotificationPort,
   EmailDeliverySummary,
   EmailSendMessage,
   EmailSendResult,

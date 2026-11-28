@@ -4,6 +4,7 @@ export * from './finance.ts';
 export * from './identity.ts';
 export * from './inventory.ts';
 export * from './notifications.ts';
+export * from './ops.ts';
 export * from './payments.ts';
 export * from './platform.ts';
 export * from './pricing.ts';

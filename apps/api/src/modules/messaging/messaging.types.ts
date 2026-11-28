@@ -125,3 +125,7 @@ export interface NotificationEmailSenderWorkerPort {
     readonly deadCount: number;
   }>;
 }
+
+export interface OpsReconciliationWorkerPort {
+  runScheduledReconciliation(): Promise<void>;
+}

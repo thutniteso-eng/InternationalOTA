@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { Idempotent } from '../idempotency/index.js';
@@ -18,6 +19,7 @@ import {
 } from '../identity/index.js';
 import type {
   AdminRefundDto,
+  AdminRefundListResponse,
   DepartureCancellationSummaryDto,
   DepartureCancelRequestDto,
   DepartureCancelResultDto,
@@ -29,6 +31,19 @@ import { RefundService } from './refund.service.js';
 @Roles('admin', 'operator')
 export class RefundAdminController {
   constructor(private readonly refundService: RefundService) {}
+
+  @Get('refunds')
+  async listRefunds(
+    @Query('status') status?: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ): Promise<AdminRefundListResponse> {
+    return this.refundService.listAdminRefunds({
+      ...(status !== undefined ? { status } : { status: 'manual_review,failed' }),
+      ...(cursor !== undefined ? { cursor } : {}),
+      ...(limit !== undefined ? { limit } : {}),
+    });
+  }
 
   @Post('departures/:id/cancel')
   @Idempotent()
@@ -54,7 +69,8 @@ export class RefundAdminController {
   async retryRefund(
     @CurrentPrincipal() principal: Principal,
     @Param('id') refundId: string,
+    @Body() body?: { reason?: string },
   ): Promise<AdminRefundDto> {
-    return this.refundService.adminRetryRefund(refundId, principal.userId);
+    return this.refundService.adminRetryRefund(refundId, principal.userId, body?.reason);
   }
 }

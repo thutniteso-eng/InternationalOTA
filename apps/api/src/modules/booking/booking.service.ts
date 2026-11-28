@@ -11,12 +11,19 @@ import {
   eq,
   getTableColumns,
   gte,
+  inArray,
+  lt,
   lte,
   sql,
   uuidv7,
 } from '@internationalota/db';
 import { formatMoney } from '@internationalota/i18n';
 import { assertSupportedCurrency, createMoney } from '@internationalota/money';
+import {
+  BOOKING_ADMIN_NOTIFICATION_PORT,
+  BOOKING_ADMIN_PAYMENT_PORT,
+  type ReconciliationFinding,
+} from '@internationalota/shared';
 import {
   BadRequestException,
   Inject,
@@ -31,6 +38,7 @@ import { LocaleService } from '../../common/i18n/locale.service.js';
 import { DRIZZLE_DB } from '../../database/database.module.js';
 import { IdentityService } from '../identity/index.js';
 import { InventoryService } from '../inventory/index.js';
+import type { BookingAdminNotificationPort } from '../notifications/index.js';
 import {
   type BookingExpiryWorkerPort,
   JobQueueService,
@@ -61,14 +69,20 @@ import { generateBookingReference, normalizeBookingReference } from './booking.r
 import {
   BOOKING_PAYMENT_SUMMARY_PORT,
   CONFIRMED_BOOKING_CANCELLATION_PORT,
+  type AdminBookingDashboardMetrics,
+  type AdminBookingDashboardWindowStats,
+  type AdminBookingDetailDto,
   type AdminBookingListQuery,
+  type BookingAdminPaymentPort,
   type BookingDetailDto,
   type BookingEventDto,
   type BookingExpiryResult,
   type BookingNotificationContext,
   type BookingPaymentSummaryDto,
   type BookingPaymentSummaryPort,
+  type BookingReconciliationSnapshot,
   type BookingRefundSummaryDto,
+  type BookingSeatSumsPort,
   type CancelBookingResult,
   type ConfirmedBookingCancellationPort,
   type ConfirmedCancelResponseDto,
@@ -77,6 +91,7 @@ import {
   type CreateHoldResult,
   type CustomerBookingListResponse,
   type HoldBookingResponseDto,
+  type LedgerBookingExpectationPort,
   type MarkPaymentPendingResult,
 } from './booking.types.js';
 
@@ -277,11 +292,19 @@ type InternalTransitionOutcome =
     };
 
 @Injectable()
-export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
+export class BookingService
+  implements
+    BookingExpiryWorkerPort,
+    BookingSeatSumsPort,
+    LedgerBookingExpectationPort,
+    OnModuleInit
+{
   private readonly logger = new Logger(BookingService.name);
   readonly holdMinutes: number;
   private paymentSummaryPort: BookingPaymentSummaryPort | null = null;
   private confirmedCancellationPort: ConfirmedBookingCancellationPort | null = null;
+  private adminPaymentPort: BookingAdminPaymentPort | null = null;
+  private adminNotificationPort: BookingAdminNotificationPort | null = null;
   private jobQueueService: JobQueueService | null = null;
 
   constructor(
@@ -320,6 +343,22 @@ export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
       this.jobQueueService = this.moduleRef.get(JobQueueService, { strict: false });
     } catch {
       this.jobQueueService = null;
+    }
+    try {
+      this.adminPaymentPort = this.moduleRef.get<BookingAdminPaymentPort>(
+        BOOKING_ADMIN_PAYMENT_PORT,
+        { strict: false },
+      );
+    } catch {
+      this.adminPaymentPort = null;
+    }
+    try {
+      this.adminNotificationPort = this.moduleRef.get<BookingAdminNotificationPort>(
+        BOOKING_ADMIN_NOTIFICATION_PORT,
+        { strict: false },
+      );
+    } catch {
+      this.adminNotificationPort = null;
     }
   }
 
@@ -1416,6 +1455,7 @@ export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
   private async listBookingsPage(
     baseConditions: readonly ReturnType<typeof sql>[],
     options: { readonly cursor?: string; readonly limit?: string },
+    redactListPii = false,
   ): Promise<CustomerBookingListResponse> {
     const limit = this.parseBookingListLimit(options.limit);
     const conditions = [...baseConditions];
@@ -1446,7 +1486,17 @@ export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
         : null;
 
     return {
-      items: pageRows.map((row) => toBookingDetailDto(row)),
+      items: pageRows.map((row) => {
+        const dto = toBookingDetailDto(row);
+        if (!redactListPii) {
+          return dto;
+        }
+        return {
+          ...dto,
+          contactEmail: '',
+          contactPhone: '',
+        };
+      }),
       nextCursor,
     };
   }
@@ -1466,6 +1516,13 @@ export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
         throw bookingInvalidQueryException(`status must be one of: ${validStatuses.join(', ')}`);
       }
       conditions.push(eq(bookingBookings.status, query.status));
+    }
+
+    if (query.productId !== undefined && query.productId !== '') {
+      if (!UUID_REGEX.test(query.productId)) {
+        throw bookingInvalidQueryException('productId must be a valid UUID');
+      }
+      conditions.push(eq(bookingBookings.productId, query.productId));
     }
 
     if (query.departureId !== undefined && query.departureId !== '') {
@@ -1497,6 +1554,228 @@ export class BookingService implements BookingExpiryWorkerPort, OnModuleInit {
       conditions.push(lte(bookingBookings.createdAt, new Date(`${query.to}T23:59:59.999Z`)));
     }
 
-    return this.listBookingsPage(conditions, query);
+    return this.listBookingsPage(conditions, query, true);
+  }
+
+  async getAdminBookingByReference(rawReference: string): Promise<AdminBookingDetailDto> {
+    const reference = normalizeBookingReference(rawReference);
+    if (!reference) {
+      throw bookingNotFoundException();
+    }
+
+    const [row] = await this.db
+      .select()
+      .from(bookingBookings)
+      .where(eq(bookingBookings.reference, reference))
+      .limit(1);
+
+    if (!row) {
+      throw bookingNotFoundException();
+    }
+
+    const events = await this.db
+      .select()
+      .from(bookingEvents)
+      .where(eq(bookingEvents.bookingId, row.id))
+      .orderBy(bookingEvents.at, bookingEvents.id);
+
+    const payment = this.paymentSummaryPort
+      ? await this.paymentSummaryPort.getPaymentSummaryForBooking(row.id)
+      : { status: null, attemptCount: 0 };
+
+    const refund = this.paymentSummaryPort?.getRefundSummaryForBooking
+      ? await this.paymentSummaryPort.getRefundSummaryForBooking(row.id)
+      : null;
+
+    const paymentRecords = this.adminPaymentPort
+      ? await this.adminPaymentPort.getAdminBookingRecords(row.id)
+      : { attempts: [], refunds: [] };
+
+    const emails = this.adminNotificationPort
+      ? await this.adminNotificationPort.getEmailsForBooking(row.id)
+      : [];
+
+    return {
+      ...toBookingDetailDto(row, events.map(toBookingEventDto), payment, refund),
+      attempts: paymentRecords.attempts,
+      refunds: paymentRecords.refunds,
+      emails,
+    };
+  }
+
+  /**
+   * Read-only port method for Inventory reconciliation: returns active seat sums per departure.
+   */
+  async getActiveSeatSumsByDeparture(): Promise<ReadonlyMap<string, number>> {
+    const res = await this.db.execute(sql`
+      SELECT departure_id::text AS "departureId", COALESCE(SUM(seats), 0)::int AS "seats"
+      FROM booking.bookings
+      WHERE status IN ('held', 'payment_pending', 'confirmed')
+      GROUP BY departure_id
+    `);
+    const map = new Map<string, number>();
+    for (const row of res.rows) {
+      map.set(String(row['departureId']), Number(row['seats']));
+    }
+    return map;
+  }
+
+  /**
+   * Read-only port method for Finance reconciliation: confirmed booking totals per currency.
+   */
+  async getConfirmedTotalsByCurrency(asOf: Date): Promise<ReadonlyMap<string, bigint>> {
+    const res = await this.db.execute(sql`
+      SELECT TRIM(currency) AS currency, COALESCE(SUM(total_amount_minor), 0)::text AS total
+      FROM booking.bookings
+      WHERE status = 'confirmed'
+        AND created_at <= ${asOf}
+      GROUP BY TRIM(currency)
+    `);
+    const map = new Map<string, bigint>();
+    for (const row of res.rows) {
+      map.set(String(row['currency']), BigInt(String(row['total'])));
+    }
+    return map;
+  }
+
+  /**
+   * Read-only non-PII snapshots for Payments reconciliation.
+   */
+  async getBookingReconciliationSnapshots(
+    asOf: Date,
+  ): Promise<readonly BookingReconciliationSnapshot[]> {
+    const rows = await this.db
+      .select({
+        id: bookingBookings.id,
+        reference: bookingBookings.reference,
+        status: bookingBookings.status,
+        totalAmountMinor: bookingBookings.totalAmountMinor,
+        currency: bookingBookings.currency,
+        paymentRef: bookingBookings.paymentRef,
+      })
+      .from(bookingBookings)
+      .where(lte(bookingBookings.createdAt, asOf));
+
+    return rows.map((row) => ({
+      id: row.id,
+      reference: row.reference,
+      status: row.status as BookingStatus,
+      totalAmountMinor: row.totalAmountMinor,
+      currency: row.currency.trim(),
+      paymentRef: row.paymentRef,
+    }));
+  }
+
+  /**
+   * Read-only lookup of booking references by ID (no PII).
+   */
+  async getBookingReferenceMap(
+    bookingIds: readonly string[],
+  ): Promise<ReadonlyMap<string, string>> {
+    const validIds = bookingIds.filter((id) => UUID_REGEX.test(id));
+    const map = new Map<string, string>();
+    if (validIds.length === 0) {
+      return map;
+    }
+    const rows = await this.db
+      .select({ id: bookingBookings.id, reference: bookingBookings.reference })
+      .from(bookingBookings)
+      .where(inArray(bookingBookings.id, validIds));
+    for (const row of rows) {
+      map.set(row.id, row.reference);
+    }
+    return map;
+  }
+
+  /**
+   * Read-only admin dashboard aggregation (Asia/Ho_Chi_Minh today & last 7 days).
+   */
+  async getAdminDashboardMetrics(): Promise<AdminBookingDashboardMetrics> {
+    const buildWindow = async (
+      intervalFilter: ReturnType<typeof sql>,
+    ): Promise<AdminBookingDashboardWindowStats> => {
+      const countsRes = await this.db.execute(sql`
+        SELECT status, COUNT(*)::int AS cnt
+        FROM booking.bookings
+        WHERE ${intervalFilter}
+        GROUP BY status
+      `);
+      const byStatus: Record<BookingStatus, number> = {
+        held: 0,
+        payment_pending: 0,
+        confirmed: 0,
+        expired: 0,
+        cancelled: 0,
+      };
+      let totalBookings = 0;
+      for (const row of countsRes.rows) {
+        const status = String(row['status']) as BookingStatus;
+        const cnt = Number(row['cnt']);
+        if (status in byStatus) {
+          byStatus[status] = cnt;
+        }
+        totalBookings += cnt;
+      }
+
+      const revRes = await this.db.execute(sql`
+        SELECT TRIM(currency) AS currency, COALESCE(SUM(total_amount_minor), 0)::text AS total
+        FROM booking.bookings
+        WHERE status = 'confirmed'
+          AND ${intervalFilter}
+        GROUP BY TRIM(currency)
+        ORDER BY TRIM(currency) ASC
+      `);
+      const confirmedRevenueByCurrency = revRes.rows.map((row) => ({
+        currency: String(row['currency']),
+        totalAmountMinor: String(row['total']),
+      }));
+
+      return {
+        byStatus,
+        totalBookings,
+        confirmedRevenueByCurrency,
+      };
+    };
+
+    const today = await buildWindow(
+      sql`timezone('Asia/Ho_Chi_Minh', created_at)::date = timezone('Asia/Ho_Chi_Minh', now())::date`,
+    );
+    const last7Days = await buildWindow(
+      sql`created_at >= (date_trunc('day', timezone('Asia/Ho_Chi_Minh', now())) - interval '6 days') AT TIME ZONE 'Asia/Ho_Chi_Minh'`,
+    );
+
+    return { today, last7Days };
+  }
+
+  /**
+   * Read-only reconciliation check: flags overdue holds still in held/payment_pending past hold_expires_at + 5 min.
+   */
+  async runReconciliationChecks(asOf: Date): Promise<readonly ReconciliationFinding[]> {
+    const overdueRes = await this.db
+      .select({
+        id: bookingBookings.id,
+        reference: bookingBookings.reference,
+        status: bookingBookings.status,
+        holdExpiresAt: bookingBookings.holdExpiresAt,
+      })
+      .from(bookingBookings)
+      .where(
+        and(
+          inArray(bookingBookings.status, ['held', 'payment_pending']),
+          lt(bookingBookings.holdExpiresAt, sql`${asOf}::timestamptz - interval '5 minutes'`),
+        ),
+      );
+
+    return overdueRes.map((row) => ({
+      code: 'BOOKING_OVERDUE_HOLD',
+      severity: 'warning' as const,
+      entityType: 'booking',
+      entityId: row.id,
+      details: {
+        reference: row.reference,
+        status: row.status,
+        holdExpiresAt: row.holdExpiresAt.toISOString(),
+      },
+    }));
   }
 }

@@ -123,3 +123,23 @@ export interface InventoryDepartureQuoteTarget {
 export interface InventoryDepartureCheckPort {
   hasDepartures(productId: string, tx?: Pick<DatabaseClient, 'select'>): Promise<boolean>;
 }
+
+export interface AdminAuditTxRunner {
+  recordAudit(
+    tx: Pick<DatabaseClient, 'insert' | 'execute'>,
+    input: {
+      readonly actorUserId: string;
+      readonly action:
+        | 'refund_retry'
+        | 'departure_close'
+        | 'departure_reopen'
+        | 'departure_cancel'
+        | 'reconciliation_run'
+        | 'admin_role_grant';
+      readonly targetType: string;
+      readonly targetId: string;
+      readonly reason?: string | null;
+      readonly requestId?: string | null;
+    },
+  ): Promise<void>;
+}

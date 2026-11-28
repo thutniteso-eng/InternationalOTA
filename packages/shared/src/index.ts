@@ -44,3 +44,42 @@ export function resolveAppEnv(
   }
   return 'local';
 }
+
+export type ReconciliationSeverity = 'error' | 'warning';
+
+export interface ReconciliationFinding {
+  readonly code: string;
+  readonly severity: ReconciliationSeverity;
+  readonly entityType: string;
+  readonly entityId: string;
+  readonly details: Record<string, unknown>;
+}
+
+export type AdminAuditAction =
+  | 'refund_retry'
+  | 'departure_close'
+  | 'departure_reopen'
+  | 'departure_cancel'
+  | 'reconciliation_run'
+  | 'admin_role_grant';
+
+export interface AdminAuditRecordInput {
+  readonly actorUserId: string;
+  readonly action: AdminAuditAction;
+  readonly targetType: string;
+  readonly targetId: string;
+  readonly reason?: string | null;
+  readonly requestId?: string | null;
+}
+
+export const ADMIN_AUDIT_PORT = 'ADMIN_AUDIT_PORT';
+export const BOOKING_SEAT_SUMS_PORT = 'BOOKING_SEAT_SUMS_PORT';
+export const LEDGER_BOOKING_EXPECTATION_PORT = 'LEDGER_BOOKING_EXPECTATION_PORT';
+export const LEDGER_PAYMENT_EXPECTATION_PORT = 'LEDGER_PAYMENT_EXPECTATION_PORT';
+export const BOOKING_ADMIN_PAYMENT_PORT = 'BOOKING_ADMIN_PAYMENT_PORT';
+export const BOOKING_ADMIN_NOTIFICATION_PORT = 'BOOKING_ADMIN_NOTIFICATION_PORT';
+export const OPS_RECONCILIATION_WORKER_PORT = 'OPS_RECONCILIATION_WORKER_PORT';
+
+export interface OpsReconciliationWorkerPort {
+  runScheduledReconciliation(): Promise<void>;
+}

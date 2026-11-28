@@ -11,7 +11,13 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Idempotent } from '../idempotency/index.js';
-import { AuthGuard, Roles, RolesGuard } from '../identity/index.js';
+import {
+  AuthGuard,
+  CurrentPrincipal,
+  type Principal,
+  Roles,
+  RolesGuard,
+} from '../identity/index.js';
 import { InventoryService } from './inventory.service.js';
 import type {
   AdminDepartureDto,
@@ -59,15 +65,23 @@ export class InventoryAdminController {
   @Post('departures/:departureId/close')
   @Idempotent()
   @HttpCode(HttpStatus.OK)
-  async closeDeparture(@Param('departureId') departureId: string): Promise<AdminDepartureDto> {
-    return this.inventoryService.closeDeparture(departureId);
+  async closeDeparture(
+    @CurrentPrincipal() principal: Principal,
+    @Param('departureId') departureId: string,
+    @Body() body?: { reason?: string },
+  ): Promise<AdminDepartureDto> {
+    return this.inventoryService.closeDeparture(departureId, principal.userId, body?.reason);
   }
 
   @Post('departures/:departureId/reopen')
   @Idempotent()
   @HttpCode(HttpStatus.OK)
-  async reopenDeparture(@Param('departureId') departureId: string): Promise<AdminDepartureDto> {
-    return this.inventoryService.reopenDeparture(departureId);
+  async reopenDeparture(
+    @CurrentPrincipal() principal: Principal,
+    @Param('departureId') departureId: string,
+    @Body() body?: { reason?: string },
+  ): Promise<AdminDepartureDto> {
+    return this.inventoryService.reopenDeparture(departureId, principal.userId, body?.reason);
   }
 
   @Post('departures/:departureId/cancel')

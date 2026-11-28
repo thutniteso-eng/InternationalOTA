@@ -4,12 +4,17 @@ import {
   type DatabaseClient,
   type DatabaseTransaction,
   eq,
+  gt,
+  inArray,
+  isNotNull,
   isNull,
   lte,
+  or,
   type OutboxEvent,
   outboxEvents,
   sql,
 } from '@internationalota/db';
+import type { ReconciliationFinding } from '@internationalota/shared';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { getRequestId, runWithRequestContext } from '../../common/observability/request-context.js';
 import { DRIZZLE_DB } from '../../database/database.module.js';
@@ -276,5 +281,59 @@ export class OutboxService {
     } finally {
       this.inFlight.delete(runPromise);
     }
+  }
+
+  /**
+   * Read-only lookup of outbox event IDs associated with a booking (no payload returned).
+   */
+  async findEventIdsForBooking(bookingId: string): Promise<readonly string[]> {
+    const rows = await this.db
+      .select({ id: outboxEvents.id })
+      .from(outboxEvents)
+      .where(
+        and(
+          inArray(outboxEvents.aggregateType, ['booking', 'refund', 'payment_attempt']),
+          or(
+            eq(outboxEvents.aggregateId, bookingId),
+            sql`${outboxEvents.payload}->>'bookingId' = ${bookingId}`,
+          ),
+        ),
+      );
+    return rows.map((r) => r.id);
+  }
+
+  /**
+   * Read-only reconciliation check: flags dead-lettered or high-retry (>5) outbox events.
+   */
+  async runReconciliationChecks(asOf: Date): Promise<readonly ReconciliationFinding[]> {
+    const rows = await this.db
+      .select({
+        id: outboxEvents.id,
+        eventType: outboxEvents.eventType,
+        attempts: outboxEvents.attempts,
+        deadLetteredAt: outboxEvents.deadLetteredAt,
+      })
+      .from(outboxEvents)
+      .where(
+        and(
+          lte(outboxEvents.occurredAt, asOf),
+          or(
+            isNotNull(outboxEvents.deadLetteredAt),
+            and(isNull(outboxEvents.publishedAt), gt(outboxEvents.attempts, 5)),
+          ),
+        ),
+      );
+
+    return rows.map((row) => ({
+      code: 'OUTBOX_STUCK_OR_DEAD_LETTER',
+      severity: 'warning' as const,
+      entityType: 'outbox_event',
+      entityId: row.id,
+      details: {
+        eventType: row.eventType,
+        attempts: row.attempts,
+        deadLettered: row.deadLetteredAt !== null,
+      },
+    }));
   }
 }

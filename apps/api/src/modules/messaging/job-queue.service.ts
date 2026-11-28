@@ -1,5 +1,9 @@
 import { type DatabaseClient, idempotencyKeys, lt, sql } from '@internationalota/db';
-import { resolveAppEnv } from '@internationalota/shared';
+import {
+  OPS_RECONCILIATION_WORKER_PORT,
+  type OpsReconciliationWorkerPort,
+  resolveAppEnv,
+} from '@internationalota/shared';
 import {
   Inject,
   Injectable,
@@ -36,6 +40,7 @@ export const QUEUE_MOCK_PSP_DELAYED_CALLBACK = 'mock-psp-delayed-callback';
 export const QUEUE_REFUND_EXECUTOR = 'refund-executor';
 export const QUEUE_DEPARTURE_BOOKING_CANCEL = 'departure-booking-cancel';
 export const QUEUE_NOTIFICATION_EMAIL_SEND = 'notification-email-send';
+export const QUEUE_OPS_DAILY_RECONCILIATION = 'ops-daily-reconciliation';
 
 const EXPIRY_WORKER_BATCH_LIMIT = 50;
 
@@ -54,6 +59,7 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
   private refundExecutorWorker: RefundExecutorWorkerPort | null = null;
   private departureBookingCancelWorker: DepartureBookingCancelWorkerPort | null = null;
   private notificationEmailSenderWorker: NotificationEmailSenderWorkerPort | null = null;
+  private opsReconciliationWorker: OpsReconciliationWorkerPort | null = null;
 
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: DatabaseClient,
@@ -124,6 +130,15 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
       this.notificationEmailSenderWorker = null;
     }
 
+    try {
+      this.opsReconciliationWorker = this.moduleRef.get<OpsReconciliationWorkerPort>(
+        OPS_RECONCILIATION_WORKER_PORT,
+        { strict: false },
+      );
+    } catch {
+      this.opsReconciliationWorker = null;
+    }
+
     if (process.env['PG_BOSS_DISABLED'] === 'true') {
       return;
     }
@@ -168,6 +183,7 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
     await boss.createQueue(QUEUE_REFUND_EXECUTOR);
     await boss.createQueue(QUEUE_DEPARTURE_BOOKING_CANCEL);
     await boss.createQueue(QUEUE_NOTIFICATION_EMAIL_SEND);
+    await boss.createQueue(QUEUE_OPS_DAILY_RECONCILIATION);
 
     await boss.work(QUEUE_OUTBOX_RELAY, async () => {
       let processed = 0;
@@ -236,6 +252,13 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
       await this.notificationEmailSenderWorker.processDueEmails();
     });
 
+    await boss.work(QUEUE_OPS_DAILY_RECONCILIATION, async () => {
+      if (!this.opsReconciliationWorker) {
+        return;
+      }
+      await this.opsReconciliationWorker.runScheduledReconciliation();
+    });
+
     // Daily cleanup of expired platform.idempotency_keys rows
     await boss.schedule(QUEUE_IDEMPOTENCY_CLEANUP, '0 3 * * *');
     await boss.schedule(QUEUE_OUTBOX_RELAY, '* * * * *');
@@ -244,6 +267,12 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
     await boss.schedule(QUEUE_PAYMENT_RECONCILIATION, '*/5 * * * *');
     await boss.schedule(QUEUE_REFUND_EXECUTOR, '* * * * *');
     await boss.schedule(QUEUE_NOTIFICATION_EMAIL_SEND, '* * * * *');
+    await boss.schedule(
+      QUEUE_OPS_DAILY_RECONCILIATION,
+      '0 2 * * *',
+      {},
+      { tz: 'Asia/Ho_Chi_Minh' },
+    );
 
     this.logger.log(
       JSON.stringify({

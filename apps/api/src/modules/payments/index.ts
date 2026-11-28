@@ -14,6 +14,8 @@ export { PaymentsModule } from './payments.module.js';
 export { PaymentsService } from './payments.service.js';
 export type {
   AdminRefundDto,
+  AdminRefundListResponse,
+  AdminRefundWithBookingDto,
   BookingCancellationPreviewDto,
   CreateCheckoutInput,
   CreateCheckoutOutput,
@@ -24,7 +26,9 @@ export type {
   DepartureCancelResultDto,
   InitiateCheckoutRequestDto,
   InitiateCheckoutResponseDto,
+  LedgerPaymentExpectationPort,
   MockPspAction,
+  PaymentCurrencyExpectedTotals,
   PaymentOutcome,
   PaymentProvider,
   PaymentVerificationResult,

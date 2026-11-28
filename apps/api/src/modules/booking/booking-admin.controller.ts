@@ -1,7 +1,7 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard, Roles, RolesGuard } from '../identity/index.js';
 import { BookingService } from './booking.service.js';
-import type { CustomerBookingListResponse } from './booking.types.js';
+import type { AdminBookingDetailDto, CustomerBookingListResponse } from './booking.types.js';
 
 @Controller('admin/bookings')
 @UseGuards(AuthGuard, RolesGuard)
@@ -12,6 +12,7 @@ export class BookingAdminController {
   @Get()
   async list(
     @Query('status') status?: string,
+    @Query('productId') productId?: string,
     @Query('departureId') departureId?: string,
     @Query('departure') departure?: string,
     @Query('reference') reference?: string,
@@ -23,6 +24,7 @@ export class BookingAdminController {
     const depFilter = departureId ?? departure;
     return this.bookingService.listAdminBookings({
       ...(status !== undefined ? { status } : {}),
+      ...(productId !== undefined ? { productId } : {}),
       ...(depFilter !== undefined ? { departureId: depFilter } : {}),
       ...(reference !== undefined ? { reference } : {}),
       ...(from !== undefined ? { from } : {}),
@@ -30,5 +32,10 @@ export class BookingAdminController {
       ...(cursor !== undefined ? { cursor } : {}),
       ...(limit !== undefined ? { limit } : {}),
     });
+  }
+
+  @Get(':reference')
+  async getByReference(@Param('reference') reference: string): Promise<AdminBookingDetailDto> {
+    return this.bookingService.getAdminBookingByReference(reference);
   }
 }

@@ -7,9 +7,15 @@ import {
 import { PgBoss } from 'pg-boss';
 import {
   QUEUE_BOOKING_EXPIRY,
+  QUEUE_DEPARTURE_BOOKING_CANCEL,
   QUEUE_IDEMPOTENCY_CLEANUP,
   QUEUE_INBOX_RELAY,
+  QUEUE_MOCK_PSP_DELAYED_CALLBACK,
+  QUEUE_NOTIFICATION_EMAIL_SEND,
+  QUEUE_OPS_DAILY_RECONCILIATION,
   QUEUE_OUTBOX_RELAY,
+  QUEUE_PAYMENT_RECONCILIATION,
+  QUEUE_REFUND_EXECUTOR,
 } from '../modules/messaging/index.js';
 
 /**
@@ -54,6 +60,12 @@ async function main(): Promise<void> {
       await boss.createQueue(QUEUE_INBOX_RELAY);
       await boss.createQueue(QUEUE_IDEMPOTENCY_CLEANUP);
       await boss.createQueue(QUEUE_BOOKING_EXPIRY);
+      await boss.createQueue(QUEUE_PAYMENT_RECONCILIATION);
+      await boss.createQueue(QUEUE_MOCK_PSP_DELAYED_CALLBACK);
+      await boss.createQueue(QUEUE_REFUND_EXECUTOR);
+      await boss.createQueue(QUEUE_DEPARTURE_BOOKING_CANCEL);
+      await boss.createQueue(QUEUE_NOTIFICATION_EMAIL_SEND);
+      await boss.createQueue(QUEUE_OPS_DAILY_RECONCILIATION);
     } finally {
       await boss.stop({ graceful: true, timeout: 5_000 });
     }

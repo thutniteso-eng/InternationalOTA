@@ -7,15 +7,18 @@ import {
   type InboxMessage,
   lte,
   type PaymentAttemptRow,
+  paymentsMockPspTransactions,
   paymentsPaymentAttempts,
+  paymentsRefunds,
   sql,
 } from '@internationalota/db';
 import { type CurrencyCode, createMoney } from '@internationalota/money';
-import { resolveAppEnv } from '@internationalota/shared';
+import { type ReconciliationFinding, resolveAppEnv } from '@internationalota/shared';
 import { parseLocalDate } from '@internationalota/time';
 import { Inject, Injectable, Logger, type OnModuleInit, Optional } from '@nestjs/common';
 import { DRIZZLE_DB } from '../../database/database.module.js';
 import {
+  type BookingAdminPaymentPort,
   bookingConflictException,
   bookingEmailNotVerifiedException,
   bookingNotFoundException,
@@ -42,6 +45,8 @@ import {
 import type {
   InitiateCheckoutRequestDto,
   InitiateCheckoutResponseDto,
+  LedgerPaymentExpectationPort,
+  PaymentCurrencyExpectedTotals,
   PaymentVerificationResult,
   RefundVerificationResult,
 } from './payments.types.js';
@@ -193,7 +198,12 @@ function parseRefundVerificationPayload(message: InboxMessage): RefundVerificati
 
 @Injectable()
 export class PaymentsService
-  implements OnModuleInit, BookingPaymentSummaryPort, PaymentReconciliationWorkerPort
+  implements
+    OnModuleInit,
+    BookingPaymentSummaryPort,
+    PaymentReconciliationWorkerPort,
+    LedgerPaymentExpectationPort,
+    BookingAdminPaymentPort
 {
   private readonly logger = new Logger(PaymentsService.name);
 
@@ -890,5 +900,383 @@ export class PaymentsService
 
   async getRefundSummaryForBooking(bookingId: string): Promise<BookingRefundSummaryDto | null> {
     return this.refundService.getRefundSummaryForBooking(bookingId);
+  }
+
+  async getAdminBookingRecords(bookingId: string) {
+    const attemptRows = await this.db
+      .select()
+      .from(paymentsPaymentAttempts)
+      .where(eq(paymentsPaymentAttempts.bookingId, bookingId))
+      .orderBy(desc(paymentsPaymentAttempts.createdAt), desc(paymentsPaymentAttempts.id));
+
+    const refundRows = await this.db
+      .select()
+      .from(paymentsRefunds)
+      .where(eq(paymentsRefunds.bookingId, bookingId))
+      .orderBy(desc(paymentsRefunds.createdAt), desc(paymentsRefunds.id));
+
+    return {
+      attempts: attemptRows.map((row) => ({
+        id: row.id,
+        provider: row.provider,
+        providerRef: row.providerRef,
+        amountMinor: row.amountMinor.toString(),
+        currency: row.currency.trim(),
+        status: row.status,
+        failureReason: row.failureReason,
+        createdAt: row.createdAt.toISOString(),
+        completedAt: row.completedAt ? row.completedAt.toISOString() : null,
+      })),
+      refunds: refundRows.map((row) => ({
+        id: row.id,
+        paymentAttemptId: row.paymentAttemptId,
+        provider: row.provider,
+        amountMinor: row.amountMinor.toString(),
+        currency: row.currency.trim(),
+        reason: row.reason,
+        status: row.status,
+        providerRefundRef: row.providerRefundRef,
+        attempts: row.attempts,
+        lastError: row.lastError,
+        createdAt: row.createdAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString(),
+        completedAt: row.completedAt ? row.completedAt.toISOString() : null,
+      })),
+    };
+  }
+
+  /**
+   * Read-only port method for Finance reconciliation: per-currency expected totals as of `asOf`.
+   */
+  async getPaymentLedgerExpectedTotalsByCurrency(
+    asOf: Date,
+  ): Promise<ReadonlyMap<string, PaymentCurrencyExpectedTotals>> {
+    const capturedRes = await this.db.execute(sql`
+      SELECT TRIM(currency) AS currency, COALESCE(SUM(amount_minor), 0)::text AS total
+      FROM payments.payment_attempts
+      WHERE status IN ('succeeded', 'refund_required')
+        AND (completed_at IS NULL OR completed_at <= ${asOf})
+      GROUP BY TRIM(currency)
+    `);
+
+    const settledRefundsRes = await this.db.execute(sql`
+      SELECT TRIM(currency) AS currency, COALESCE(SUM(amount_minor), 0)::text AS total
+      FROM payments.refunds
+      WHERE status = 'succeeded'
+        AND completed_at IS NOT NULL
+        AND completed_at <= ${asOf}
+      GROUP BY TRIM(currency)
+    `);
+
+    const openRefundsRes = await this.db.execute(sql`
+      SELECT TRIM(currency) AS currency, COALESCE(SUM(amount_minor), 0)::text AS total
+      FROM payments.refunds
+      WHERE status IN ('requested', 'processing', 'failed', 'manual_review')
+        AND created_at <= ${asOf}
+      GROUP BY TRIM(currency)
+    `);
+
+    const unrefundedRes = await this.db.execute(sql`
+      SELECT TRIM(a.currency) AS currency, COALESCE(SUM(a.amount_minor), 0)::text AS total
+      FROM payments.payment_attempts a
+      WHERE a.status = 'refund_required'
+        AND (a.completed_at IS NULL OR a.completed_at <= ${asOf})
+        AND NOT EXISTS (
+          SELECT 1 FROM payments.refunds r
+          WHERE r.payment_attempt_id = a.id
+            AND r.created_at <= ${asOf}
+        )
+      GROUP BY TRIM(a.currency)
+    `);
+
+    const acc = new Map<
+      string,
+      {
+        capturedMinor: bigint;
+        settledRefundsMinor: bigint;
+        openRefundsMinor: bigint;
+        unrefundedRefundRequiredMinor: bigint;
+      }
+    >();
+
+    const ensure = (currency: string) => {
+      let entry = acc.get(currency);
+      if (!entry) {
+        entry = {
+          capturedMinor: 0n,
+          settledRefundsMinor: 0n,
+          openRefundsMinor: 0n,
+          unrefundedRefundRequiredMinor: 0n,
+        };
+        acc.set(currency, entry);
+      }
+      return entry;
+    };
+
+    for (const row of capturedRes.rows) {
+      ensure(String(row['currency'])).capturedMinor = BigInt(String(row['total']));
+    }
+    for (const row of settledRefundsRes.rows) {
+      ensure(String(row['currency'])).settledRefundsMinor = BigInt(String(row['total']));
+    }
+    for (const row of openRefundsRes.rows) {
+      ensure(String(row['currency'])).openRefundsMinor = BigInt(String(row['total']));
+    }
+    for (const row of unrefundedRes.rows) {
+      ensure(String(row['currency'])).unrefundedRefundRequiredMinor = BigInt(String(row['total']));
+    }
+
+    return acc;
+  }
+
+  /**
+   * Read-only reconciliation checks owned by Payments:
+   * - Check 2: Booking <-> payment_attempts & refund_required coverage
+   * - Check 3: Payment attempts <-> mock_psp_transactions settlement
+   * - Check 5: Stuck initiated attempts (>60 min) & manual_review refunds (warnings)
+   */
+  async runReconciliationChecks(asOf: Date): Promise<readonly ReconciliationFinding[]> {
+    const findings: ReconciliationFinding[] = [];
+    const bookings = await this.bookingService.getBookingReconciliationSnapshots(asOf);
+    const bookingsById = new Map(bookings.map((b) => [b.id, b]));
+
+    const attempts = await this.db
+      .select()
+      .from(paymentsPaymentAttempts)
+      .where(lte(paymentsPaymentAttempts.createdAt, asOf));
+
+    const refunds = await this.db
+      .select()
+      .from(paymentsRefunds)
+      .where(lte(paymentsRefunds.createdAt, asOf));
+
+    const mockTxs = await this.db.select().from(paymentsMockPspTransactions);
+
+    const attemptsById = new Map(attempts.map((a) => [a.id, a]));
+    const succeededByBooking = new Map<string, PaymentAttemptRow[]>();
+    const refundAttemptIds = new Set(refunds.map((r) => r.paymentAttemptId));
+
+    for (const attempt of attempts) {
+      if (attempt.status === 'succeeded') {
+        const list = succeededByBooking.get(attempt.bookingId) ?? [];
+        list.push(attempt);
+        succeededByBooking.set(attempt.bookingId, list);
+      }
+    }
+
+    // Check 2a: every confirmed booking has 1 matching succeeded attempt
+    for (const booking of bookings) {
+      if (booking.status !== 'confirmed') {
+        continue;
+      }
+      const matching = succeededByBooking.get(booking.id) ?? [];
+      if (matching.length === 0) {
+        findings.push({
+          code: 'BOOKING_CONFIRMED_MISSING_SUCCEEDED_ATTEMPT',
+          severity: 'error',
+          entityType: 'booking',
+          entityId: booking.id,
+          details: { reference: booking.reference },
+        });
+        continue;
+      }
+      if (matching.length > 1) {
+        findings.push({
+          code: 'BOOKING_CONFIRMED_MULTIPLE_SUCCEEDED_ATTEMPTS',
+          severity: 'error',
+          entityType: 'booking',
+          entityId: booking.id,
+          details: { reference: booking.reference, attemptCount: matching.length },
+        });
+        continue;
+      }
+
+      const attempt = matching[0]!;
+      if (attempt.amountMinor !== booking.totalAmountMinor) {
+        findings.push({
+          code: 'PAYMENT_AMOUNT_MISMATCH',
+          severity: 'error',
+          entityType: 'payment_attempt',
+          entityId: attempt.id,
+          details: {
+            bookingId: booking.id,
+            reference: booking.reference,
+            bookingAmountMinor: booking.totalAmountMinor.toString(),
+            attemptAmountMinor: attempt.amountMinor.toString(),
+          },
+        });
+      }
+      if (attempt.currency.trim() !== booking.currency.trim()) {
+        findings.push({
+          code: 'PAYMENT_CURRENCY_MISMATCH',
+          severity: 'error',
+          entityType: 'payment_attempt',
+          entityId: attempt.id,
+          details: {
+            bookingId: booking.id,
+            reference: booking.reference,
+            bookingCurrency: booking.currency.trim(),
+            attemptCurrency: attempt.currency.trim(),
+          },
+        });
+      }
+      if (booking.paymentRef !== attempt.providerRef) {
+        findings.push({
+          code: 'BOOKING_PAYMENT_REF_MISMATCH',
+          severity: 'error',
+          entityType: 'booking',
+          entityId: booking.id,
+          details: {
+            reference: booking.reference,
+            bookingPaymentRef: booking.paymentRef,
+            attemptProviderRef: attempt.providerRef,
+          },
+        });
+      }
+    }
+
+    // Check 2b & 2c & Check 5 initiated attempts
+    const staleThresholdMs = asOf.getTime() - 60 * 60_000;
+    for (const attempt of attempts) {
+      const attemptBooking = bookingsById.get(attempt.bookingId);
+      if (attempt.status === 'succeeded') {
+        if (
+          !attemptBooking ||
+          (attemptBooking.status !== 'confirmed' && attemptBooking.status !== 'cancelled')
+        ) {
+          findings.push({
+            code: 'PAYMENT_SUCCEEDED_INVALID_BOOKING_STATUS',
+            severity: 'error',
+            entityType: 'payment_attempt',
+            entityId: attempt.id,
+            details: {
+              bookingId: attempt.bookingId,
+              ...(attemptBooking ? { reference: attemptBooking.reference } : {}),
+              bookingStatus: attemptBooking?.status ?? 'missing',
+            },
+          });
+        }
+      } else if (attempt.status === 'refund_required' && !refundAttemptIds.has(attempt.id)) {
+        findings.push({
+          code: 'PAYMENT_REFUND_REQUIRED_MISSING_REFUND',
+          severity: 'error',
+          entityType: 'payment_attempt',
+          entityId: attempt.id,
+          details: {
+            bookingId: attempt.bookingId,
+            ...(attemptBooking ? { reference: attemptBooking.reference } : {}),
+          },
+        });
+      } else if (attempt.status === 'initiated' && attempt.createdAt.getTime() < staleThresholdMs) {
+        findings.push({
+          code: 'PAYMENT_STUCK_INITIATED',
+          severity: 'warning',
+          entityType: 'payment_attempt',
+          entityId: attempt.id,
+          details: {
+            bookingId: attempt.bookingId,
+            ...(attemptBooking ? { reference: attemptBooking.reference } : {}),
+            createdAt: attempt.createdAt.toISOString(),
+          },
+        });
+      }
+    }
+
+    // Check 3: Mock PSP settlement <-> payment attempts
+    const mockTxByAttemptId = new Map(mockTxs.map((tx) => [tx.attemptId, tx]));
+    for (const tx of mockTxs) {
+      if (tx.status !== 'succeeded') {
+        continue;
+      }
+      const txTimestamp = tx.occurredAt ?? tx.updatedAt;
+      if (txTimestamp.getTime() > asOf.getTime()) {
+        continue;
+      }
+      const attempt = attemptsById.get(tx.attemptId);
+      if (!attempt || (attempt.status !== 'succeeded' && attempt.status !== 'refund_required')) {
+        findings.push({
+          code: 'PSP_SETTLEMENT_MISSING_ATTEMPT',
+          severity: 'error',
+          entityType: 'mock_psp_transaction',
+          entityId: tx.id,
+          details: {
+            attemptId: tx.attemptId,
+            providerRef: tx.providerRef,
+            attemptStatus: attempt?.status ?? 'missing',
+          },
+        });
+        continue;
+      }
+      if (
+        tx.amountMinor !== attempt.amountMinor ||
+        tx.currency.trim() !== attempt.currency.trim()
+      ) {
+        findings.push({
+          code: 'PSP_SETTLEMENT_AMOUNT_MISMATCH',
+          severity: 'error',
+          entityType: 'mock_psp_transaction',
+          entityId: tx.id,
+          details: {
+            attemptId: attempt.id,
+            pspAmountMinor: tx.amountMinor.toString(),
+            attemptAmountMinor: attempt.amountMinor.toString(),
+            pspCurrency: tx.currency.trim(),
+            attemptCurrency: attempt.currency.trim(),
+          },
+        });
+      }
+    }
+
+    for (const attempt of attempts) {
+      if (
+        attempt.provider !== 'mock' ||
+        (attempt.status !== 'succeeded' && attempt.status !== 'refund_required')
+      ) {
+        continue;
+      }
+      if (attempt.completedAt && attempt.completedAt.getTime() > asOf.getTime()) {
+        continue;
+      }
+      const mockTx = mockTxByAttemptId.get(attempt.id);
+      if (
+        !mockTx ||
+        mockTx.status !== 'succeeded' ||
+        mockTx.amountMinor !== attempt.amountMinor ||
+        mockTx.currency.trim() !== attempt.currency.trim()
+      ) {
+        findings.push({
+          code: 'ATTEMPT_MISSING_PSP_SETTLEMENT',
+          severity: 'error',
+          entityType: 'payment_attempt',
+          entityId: attempt.id,
+          details: {
+            providerRef: attempt.providerRef,
+            mockTxStatus: mockTx?.status ?? 'missing',
+          },
+        });
+      }
+    }
+
+    // Check 5: refunds in manual_review
+    for (const refund of refunds) {
+      if (refund.status === 'manual_review') {
+        const refundBooking = bookingsById.get(refund.bookingId);
+        findings.push({
+          code: 'REFUND_MANUAL_REVIEW',
+          severity: 'warning',
+          entityType: 'refund',
+          entityId: refund.id,
+          details: {
+            bookingId: refund.bookingId,
+            ...(refundBooking ? { reference: refundBooking.reference } : {}),
+            amountMinor: refund.amountMinor.toString(),
+            currency: refund.currency.trim(),
+            reason: refund.reason,
+          },
+        });
+      }
+    }
+
+    return findings;
   }
 }
