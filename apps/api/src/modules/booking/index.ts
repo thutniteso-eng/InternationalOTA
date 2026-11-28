@@ -23,6 +23,7 @@ export {
 } from './booking.reference.js';
 export { BookingService, parseBookingHoldMinutes } from './booking.service.js';
 export {
+  BOOKING_OUTBOX_EVENTS_WITHOUT_CONSUMERS,
   BOOKING_PAYMENT_SUMMARY_PORT,
   CONFIRMED_BOOKING_CANCELLATION_PORT,
   type AdminBookingAttemptSummary,

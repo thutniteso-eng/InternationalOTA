@@ -27,11 +27,13 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
+  Logger,
   type OnModuleInit,
   Optional,
 } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { getRequestId } from '../../common/observability/request-context.js';
+import { requireAdminAuditPort } from '../../common/ports/admin-audit.helper.js';
 import { DRIZZLE_DB } from '../../database/database.module.js';
 import type { BookingSeatSumsPort } from '../booking/index.js';
 import { catalogProductNotFoundException, CatalogService } from '../catalog/index.js';
@@ -141,6 +143,7 @@ function toAdminDepartureDto(row: typeof inventoryDepartures.$inferSelect): Admi
 
 @Injectable()
 export class InventoryService implements OnModuleInit {
+  private readonly logger = new Logger(InventoryService.name);
   private bookingSeatSumsPort: BookingSeatSumsPort | null = null;
   private adminAuditPort: AdminAuditTxRunner | null = null;
 
@@ -152,6 +155,9 @@ export class InventoryService implements OnModuleInit {
 
   onModuleInit(): void {
     if (!this.moduleRef) {
+      this.logger.warn(
+        'ModuleRef missing during InventoryService initialization; ADMIN_AUDIT_PORT unavailable.',
+      );
       return;
     }
     try {
@@ -167,6 +173,11 @@ export class InventoryService implements OnModuleInit {
       });
     } catch {
       this.adminAuditPort = null;
+    }
+    if (!this.adminAuditPort) {
+      this.logger.warn(
+        'ADMIN_AUDIT_PORT is not bound in InventoryService; departure_close/reopen will fail closed with 503.',
+      );
     }
   }
 
@@ -631,7 +642,13 @@ export class InventoryService implements OnModuleInit {
         .where(eq(inventoryDepartures.id, departureId))
         .returning();
 
-      await this.adminAuditPort?.recordAudit(tx, {
+      const auditPort = requireAdminAuditPort(
+        this.adminAuditPort,
+        this.logger,
+        'departure_close',
+        departureId,
+      );
+      await auditPort.recordAudit(tx, {
         actorUserId,
         action: 'departure_close',
         targetType: 'departure',
@@ -671,7 +688,13 @@ export class InventoryService implements OnModuleInit {
         .where(eq(inventoryDepartures.id, departureId))
         .returning();
 
-      await this.adminAuditPort?.recordAudit(tx, {
+      const auditPort = requireAdminAuditPort(
+        this.adminAuditPort,
+        this.logger,
+        'departure_reopen',
+        departureId,
+      );
+      await auditPort.recordAudit(tx, {
         actorUserId,
         action: 'departure_reopen',
         targetType: 'departure',
@@ -937,6 +960,9 @@ export class InventoryService implements OnModuleInit {
    * Read-only reconciliation check:
    * 1. `inventory.verify_allocated()` must return zero rows.
    * 2. Every departure's `allocated` must equal active booking seats sum from Booking module.
+   *
+   * Note: intentionally evaluates current live state (not point-in-time `asOf`),
+   * which is appropriate for daily off-peak reconciliation runs.
    */
   async runReconciliationChecks(asOf: Date): Promise<readonly ReconciliationFinding[]> {
     void asOf;

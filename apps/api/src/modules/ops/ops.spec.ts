@@ -4,9 +4,11 @@ import { dirname, join } from 'node:path';
 import { Writable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import {
+  and,
   type DatabaseClient,
   eq,
   grantRoleByEmail,
+  inventoryDepartures,
   opsAdminAudit,
   opsReconciliationFindings,
   opsReconciliationRuns,
@@ -14,26 +16,41 @@ import {
   paymentsRefunds,
   seedReferenceData,
 } from '@internationalota/db';
-import type { INestApplication } from '@nestjs/common';
+import { type INestApplication, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestDatabase, type TestDbInstance } from '../../../test/test-db.js';
 import { AppModule } from '../../app.module.js';
 import { configureApp } from '../../app.setup.js';
+import { I18nModule } from '../../common/i18n/i18n.module.js';
 import { createPinoLogger } from '../../common/observability/logger.js';
-import { DRIZZLE_DB } from '../../database/database.module.js';
+import { DatabaseModule, DRIZZLE_DB } from '../../database/database.module.js';
 import { AdminGrantProductionForbiddenError, runAdminGrant } from '../../scripts/admin-grant.js';
+import {
+  cleanupDeadLetteredNoConsumerOutbox,
+  StagingOutboxCleanupProductionForbiddenError,
+} from '../../scripts/staging-outbox-cleanup.js';
 import { type HoldBookingResponseDto } from '../booking/index.js';
-import type { AdminCatalogProductDto } from '../catalog/index.js';
-import type { GenerateDeparturesResult } from '../inventory/index.js';
-import { InboxService, OutboxService } from '../messaging/index.js';
+import { type AdminCatalogProductDto, CatalogModule } from '../catalog/index.js';
+import { IdempotencyModule } from '../idempotency/index.js';
+import { IdentityModule } from '../identity/index.js';
+import {
+  type GenerateDeparturesResult,
+  InventoryModule,
+  InventoryService,
+} from '../inventory/index.js';
+import {
+  InboxService,
+  OUTBOX_EVENTS_WITHOUT_CONSUMERS,
+  OutboxService,
+} from '../messaging/index.js';
 import {
   type InitiateCheckoutResponseDto,
   MockPaymentProvider,
   RefundService,
 } from '../payments/index.js';
 import type { PublicQuoteResponse } from '../pricing/index.js';
-import type { SupplierRecord } from '../supply/index.js';
+import { type SupplierRecord, SupplyModule } from '../supply/index.js';
 import {
   OpsService,
   type AdminDashboardDto,
@@ -1047,15 +1064,52 @@ describe('Ops Daily Reconciliation & Minimal Admin Console (P2-10)', () => {
     expect(retryAudits.filter((a) => a.action === 'refund_retry')).toHaveLength(1);
     expect(retryAudits[0]!.reason).toBe('PSP recovered');
 
-    // 3. departure_close & departure_reopen audited
+    // 3. departure_close & departure_reopen each create 1 audit row in the same transaction (R2)
     const closeRes = await adminPost(`/admin/inventory/departures/${departureId}/close`, {
       reason: 'Maintenance',
     });
     expect(closeRes.status).toBe(200);
+    const closeAudits = await db
+      .select()
+      .from(opsAdminAudit)
+      .where(
+        and(eq(opsAdminAudit.targetId, departureId), eq(opsAdminAudit.action, 'departure_close')),
+      );
+    expect(closeAudits).toHaveLength(1);
+    expect(closeAudits[0]!.targetType).toBe('departure');
+    expect(closeAudits[0]!.reason).toBe('Maintenance');
+
     const reopenRes = await adminPost(`/admin/inventory/departures/${departureId}/reopen`, {
       reason: 'Cleared',
     });
     expect(reopenRes.status).toBe(200);
+    const reopenAudits = await db
+      .select()
+      .from(opsAdminAudit)
+      .where(
+        and(eq(opsAdminAudit.targetId, departureId), eq(opsAdminAudit.action, 'departure_reopen')),
+      );
+    expect(reopenAudits).toHaveLength(1);
+    expect(reopenAudits[0]!.targetType).toBe('departure');
+    expect(reopenAudits[0]!.reason).toBe('Cleared');
+
+    // 3b. reconciliation_run (run-now) creates 1 audit row in the same transaction (R2)
+    const runNowRes = await adminPost<ReconciliationRunDetailDto>('/admin/reconciliation/runs', {
+      reason: 'AC6 run-now audit verification',
+    });
+    expect(runNowRes.status).toBe(200);
+    const runNowAudits = await db
+      .select()
+      .from(opsAdminAudit)
+      .where(
+        and(
+          eq(opsAdminAudit.targetId, runNowRes.body.run.id),
+          eq(opsAdminAudit.action, 'reconciliation_run'),
+        ),
+      );
+    expect(runNowAudits).toHaveLength(1);
+    expect(runNowAudits[0]!.targetType).toBe('reconciliation_run');
+    expect(runNowAudits[0]!.reason).toBe('AC6 run-now audit verification');
 
     // 4. departure_cancel audited + failure on already-cancelled departure
     const genExtra = await adminPost<GenerateDeparturesResult>(
@@ -1170,5 +1224,145 @@ describe('Ops Daily Reconciliation & Minimal Admin Console (P2-10)', () => {
     void opsReconciliationFindings;
     void opsReconciliationRuns;
     void createBarrier;
+  });
+
+  it('R1: Admin audit fails closed (503 + error log + tx rollback) when ADMIN_AUDIT_PORT is missing', async () => {
+    const errorSpy = vi.spyOn(Logger.prototype, 'error');
+    const warnSpy = vi.spyOn(Logger.prototype, 'warn');
+    const isolatedMod = await Test.createTestingModule({
+      imports: [
+        DatabaseModule,
+        I18nModule,
+        IdempotencyModule,
+        IdentityModule,
+        SupplyModule,
+        CatalogModule,
+        InventoryModule,
+      ],
+    }).compile();
+    const isolatedApp = isolatedMod.createNestApplication({ bodyParser: false });
+    configureApp(isolatedApp);
+    await isolatedApp.listen(0);
+
+    try {
+      const isolatedUrl = await isolatedApp.getUrl();
+      const isolatedInventory = isolatedMod.get(InventoryService);
+
+      await expect(
+        isolatedInventory.closeDeparture(departureId, 'admin-r1-test', 'R1 missing audit port'),
+      ).rejects.toThrow(ServiceUnavailableException);
+
+      await expect(
+        isolatedInventory.reopenDeparture(departureId, 'admin-r1-test', 'R1 missing audit port'),
+      ).rejects.toThrow(ServiceUnavailableException);
+
+      const httpRes = await fetch(
+        `${isolatedUrl}/admin/inventory/departures/${departureId}/close`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Cookie: adminCookie,
+            'Idempotency-Key': nextIdemKey(),
+          },
+          body: JSON.stringify({ reason: 'R1 HTTP 503 check' }),
+        },
+      );
+      expect(httpRes.status).toBe(503);
+
+      expect(errorSpy.mock.calls.some((call) => String(call[0]).includes('ADMIN_AUDIT_PORT'))).toBe(
+        true,
+      );
+
+      const [depRow] = await db
+        .select({ status: inventoryDepartures.status })
+        .from(inventoryDepartures)
+        .where(eq(inventoryDepartures.id, departureId));
+      expect(depRow?.status).toBe('open');
+
+      const rejectedAudits = await db
+        .select()
+        .from(opsAdminAudit)
+        .where(eq(opsAdminAudit.reason, 'R1 HTTP 503 check'));
+      expect(rejectedAudits).toHaveLength(0);
+    } finally {
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
+      await isolatedApp.close();
+    }
+  });
+
+  it('R3: Outbox allow-list and staging cleanup script prevent false-positive dead-letter reconciliation noise', async () => {
+    expect(OUTBOX_EVENTS_WITHOUT_CONSUMERS.has('booking.payment_pending')).toBe(true);
+    expect(OUTBOX_EVENTS_WITHOUT_CONSUMERS.has('payment.initiated')).toBe(true);
+    expect(OUTBOX_EVENTS_WITHOUT_CONSUMERS.has('payment.succeeded')).toBe(true);
+    expect(OUTBOX_EVENTS_WITHOUT_CONSUMERS.has('refund.requested')).toBe(true);
+    expect(OUTBOX_EVENTS_WITHOUT_CONSUMERS.has('ops.reconciliation_errors')).toBe(true);
+
+    await expect(cleanupDeadLetteredNoConsumerOutbox(db, { appEnv: 'production' })).rejects.toThrow(
+      StagingOutboxCleanupProductionForbiddenError,
+    );
+
+    // Seed one historical dead-lettered declared no-consumer row and one real delivery failure row
+    const declaredDeadRow = await db.transaction((tx) =>
+      outboxService.enqueue(tx, {
+        aggregateType: 'payment',
+        aggregateId: `r3-declared-${randomUUID()}`,
+        eventType: 'payment.initiated',
+        payload: { test: true },
+      }),
+    );
+    await db
+      .update(outboxEvents)
+      .set({
+        attempts: 10,
+        lastError: 'No handler registered for outbox event type "payment.initiated"',
+        deadLetteredAt: new Date(),
+      })
+      .where(eq(outboxEvents.id, declaredDeadRow.id));
+
+    const realFailureRow = await db.transaction((tx) =>
+      outboxService.enqueue(tx, {
+        aggregateType: 'booking',
+        aggregateId: `r3-real-${randomUUID()}`,
+        eventType: 'booking.confirmed',
+        payload: { test: true },
+      }),
+    );
+    await db
+      .update(outboxEvents)
+      .set({
+        attempts: 10,
+        lastError: 'SMTP transport failed permanently',
+        deadLetteredAt: new Date(),
+      })
+      .where(eq(outboxEvents.id, realFailureRow.id));
+
+    const cleanupRes = await cleanupDeadLetteredNoConsumerOutbox(db, {
+      appEnv: 'staging',
+      includeLegacyUnhandled: true,
+    });
+    expect(cleanupRes.declaredUpdated).toBeGreaterThanOrEqual(1);
+
+    const [cleanedDeclared] = await db
+      .select()
+      .from(outboxEvents)
+      .where(eq(outboxEvents.id, declaredDeadRow.id));
+    expect(cleanedDeclared?.outcome).toBe('no_consumer');
+    expect(cleanedDeclared?.deadLetteredAt).toBeNull();
+    expect(cleanedDeclared?.publishedAt).not.toBeNull();
+
+    const [untouchedReal] = await db
+      .select()
+      .from(outboxEvents)
+      .where(eq(outboxEvents.id, realFailureRow.id));
+    expect(untouchedReal?.deadLetteredAt).not.toBeNull();
+
+    const findings = await outboxService.runReconciliationChecks(new Date(Date.now() + 5_000));
+    expect(findings.map((f) => f.entityId)).not.toContain(declaredDeadRow.id);
+    expect(findings.map((f) => f.entityId)).toContain(realFailureRow.id);
+
+    // Clean synthetic real failure row so subsequent reconciliation runs stay clean
+    await db.delete(outboxEvents).where(eq(outboxEvents.id, realFailureRow.id));
   });
 });

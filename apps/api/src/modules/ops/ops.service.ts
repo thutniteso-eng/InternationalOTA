@@ -24,6 +24,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  type OnModuleInit,
 } from '@nestjs/common';
 import pg from 'pg';
 import { getRequestId } from '../../common/observability/request-context.js';
@@ -34,15 +35,16 @@ import { InventoryService } from '../inventory/index.js';
 import { OutboxService } from '../messaging/index.js';
 import { NotificationsService } from '../notifications/index.js';
 import { PaymentsService, RefundService } from '../payments/index.js';
-import type {
-  AdminAuditPort,
-  AdminDashboardDto,
-  OpsAuditDbRunner,
-  ReconciliationFindingDto,
-  ReconciliationFindingGroupDto,
-  ReconciliationRunDetailDto,
-  ReconciliationRunDto,
-  ReconciliationRunListResponse,
+import {
+  type AdminAuditPort,
+  type AdminDashboardDto,
+  OPS_OUTBOX_EVENTS_WITHOUT_CONSUMERS,
+  type OpsAuditDbRunner,
+  type ReconciliationFindingDto,
+  type ReconciliationFindingGroupDto,
+  type ReconciliationRunDetailDto,
+  type ReconciliationRunDto,
+  type ReconciliationRunListResponse,
 } from './ops.types.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -81,7 +83,7 @@ export type RunReconciliationOutcome =
   | { readonly ok: false; readonly reason: 'already_running' };
 
 @Injectable()
-export class OpsService implements AdminAuditPort, OpsReconciliationWorkerPort {
+export class OpsService implements OnModuleInit, AdminAuditPort, OpsReconciliationWorkerPort {
   private readonly logger = new Logger(OpsService.name);
 
   constructor(
@@ -95,6 +97,10 @@ export class OpsService implements AdminAuditPort, OpsReconciliationWorkerPort {
     private readonly notificationsService: NotificationsService,
     private readonly refundService: RefundService,
   ) {}
+
+  onModuleInit(): void {
+    this.outboxService.registerEventsWithoutConsumers(OPS_OUTBOX_EVENTS_WITHOUT_CONSUMERS);
+  }
 
   async recordAudit(tx: OpsAuditDbRunner, input: AdminAuditRecordInput): Promise<void> {
     await tx.insert(opsAdminAudit).values({

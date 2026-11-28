@@ -67,6 +67,7 @@ import {
 } from './booking.errors.js';
 import { generateBookingReference, normalizeBookingReference } from './booking.reference.js';
 import {
+  BOOKING_OUTBOX_EVENTS_WITHOUT_CONSUMERS,
   BOOKING_PAYMENT_SUMMARY_PORT,
   CONFIRMED_BOOKING_CANCELLATION_PORT,
   type AdminBookingDashboardMetrics,
@@ -320,6 +321,7 @@ export class BookingService
   }
 
   onModuleInit(): void {
+    this.outboxService.registerEventsWithoutConsumers(BOOKING_OUTBOX_EVENTS_WITHOUT_CONSUMERS);
     if (!this.moduleRef) {
       return;
     }

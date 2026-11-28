@@ -21,6 +21,7 @@ import { DRIZZLE_DB } from '../../database/database.module.js';
 import {
   calculateExponentialBackoffMs,
   type EnqueueOutboxEventInput,
+  OUTBOX_EVENTS_WITHOUT_CONSUMERS,
   type OutboxEventHandler,
   type OutboxRelayOptions,
 } from './messaging.types.js';
@@ -97,6 +98,16 @@ export class OutboxService {
     this.handlers.clear();
   }
 
+  /**
+   * Registers domain outbox event types intentionally emitted without a
+   * downstream consumer yet so relay marks them `outcome = 'no_consumer'`.
+   */
+  registerEventsWithoutConsumers(eventTypes: readonly string[]): void {
+    for (const eventType of eventTypes) {
+      OUTBOX_EVENTS_WITHOUT_CONSUMERS.add(eventType);
+    }
+  }
+
   getMaxAttempts(): number {
     const raw = process.env['OUTBOX_MAX_ATTEMPTS'];
     const parsed = raw ? Number.parseInt(raw, 10) : NaN;
@@ -159,6 +170,7 @@ export class OutboxService {
 
       for (const event of claimed) {
         const registeredHandlers = this.handlers.get(event.eventType);
+        const hasHandlers = Boolean(registeredHandlers && registeredHandlers.length > 0);
         const attempt = event.attempts + 1;
         const payloadObj =
           typeof event.payload === 'object' && event.payload !== null
@@ -171,11 +183,32 @@ export class OutboxService {
         const eventRequestId =
           typeof metaObj?.['requestId'] === 'string' ? metaObj['requestId'] : undefined;
 
+        if (!hasHandlers && OUTBOX_EVENTS_WITHOUT_CONSUMERS.has(event.eventType)) {
+          await tx
+            .update(outboxEvents)
+            .set({
+              publishedAt: sql`now()`,
+              outcome: 'no_consumer',
+              lastError: null,
+            })
+            .where(eq(outboxEvents.id, event.id));
+
+          this.logger.log(
+            JSON.stringify({
+              event: 'outbox_event_no_consumer',
+              eventId: event.id,
+              eventType: event.eventType,
+              ...(eventRequestId ? { requestId: eventRequestId } : {}),
+            }),
+          );
+          continue;
+        }
+
         let handlerError: unknown = null;
         let handlerSucceeded = false;
 
         const executeHandler = async (): Promise<void> => {
-          if (!registeredHandlers || registeredHandlers.length === 0) {
+          if (!hasHandlers || !registeredHandlers) {
             throw new Error(`No handler registered for outbox event type "${event.eventType}"`);
           }
           for (const handler of registeredHandlers) {
@@ -204,6 +237,7 @@ export class OutboxService {
             .update(outboxEvents)
             .set({
               publishedAt: sql`now()`,
+              outcome: 'delivered',
               lastError: null,
             })
             .where(eq(outboxEvents.id, event.id));

@@ -12,6 +12,7 @@ export {
 } from './payments.errors.js';
 export { PaymentsModule } from './payments.module.js';
 export { PaymentsService } from './payments.service.js';
+export { PAYMENTS_OUTBOX_EVENTS_WITHOUT_CONSUMERS } from './payments.types.js';
 export type {
   AdminRefundDto,
   AdminRefundListResponse,

@@ -53,3 +53,9 @@ export interface AdminDashboardDto {
   readonly latestReconciliation: ReconciliationRunDto | null;
   readonly pendingRefundsCount: number;
 }
+
+/**
+ * Informational ops outbox event types emitted as an alert trail without an
+ * in-process outbox consumer yet.
+ */
+export const OPS_OUTBOX_EVENTS_WITHOUT_CONSUMERS = ['ops.reconciliation_errors'] as const;

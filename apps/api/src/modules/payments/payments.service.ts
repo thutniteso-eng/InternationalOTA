@@ -42,13 +42,14 @@ import {
   paymentProviderUnavailableException,
   paymentTooManyAttemptsException,
 } from './payments.errors.js';
-import type {
-  InitiateCheckoutRequestDto,
-  InitiateCheckoutResponseDto,
-  LedgerPaymentExpectationPort,
-  PaymentCurrencyExpectedTotals,
-  PaymentVerificationResult,
-  RefundVerificationResult,
+import {
+  type InitiateCheckoutRequestDto,
+  type InitiateCheckoutResponseDto,
+  type LedgerPaymentExpectationPort,
+  type PaymentCurrencyExpectedTotals,
+  PAYMENTS_OUTBOX_EVENTS_WITHOUT_CONSUMERS,
+  type PaymentVerificationResult,
+  type RefundVerificationResult,
 } from './payments.types.js';
 import { RefundService } from './refund.service.js';
 
@@ -220,6 +221,7 @@ export class PaymentsService
   ) {}
 
   onModuleInit(): void {
+    this.outboxService.registerEventsWithoutConsumers(PAYMENTS_OUTBOX_EVENTS_WITHOUT_CONSUMERS);
     this.syncProviderRegistrations();
   }
 

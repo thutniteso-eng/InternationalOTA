@@ -20,6 +20,7 @@
     "catalog:fixtures": "pnpm --filter @internationalota/db run catalog:fixtures",
     "demo:load": "pnpm build:packages && pnpm --filter @internationalota/api run demo:load",
     "staging:cleanup-test-data": "pnpm build:packages && pnpm --filter @internationalota/api run staging:cleanup-test-data",
+    "staging:outbox-cleanup": "pnpm build:packages && pnpm --filter @internationalota/api run staging:outbox-cleanup",
     "licenses:check": "node tools/check-licenses.mjs",
     "lint": "pnpm build:packages && pnpm -r run lint && eslint tools",
     "lint:boundaries": "depcruise apps/api/src --config .dependency-cruiser.cjs",

@@ -26,6 +26,8 @@ export {
   type MockPspDelayedCallbackWorkerPort,
   NOTIFICATION_EMAIL_SENDER_WORKER_PORT,
   type NotificationEmailSenderWorkerPort,
+  OUTBOX_EVENTS_WITHOUT_CONSUMERS,
+  type OutboxDeliveryOutcome,
   type OutboxEventHandler,
   type OutboxRelayOptions,
   PAYMENT_RECONCILIATION_WORKER_PORT,

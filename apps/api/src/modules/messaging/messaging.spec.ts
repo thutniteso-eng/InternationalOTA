@@ -17,6 +17,7 @@ import { configureApp } from '../../app.setup.js';
 import { DRIZZLE_DB } from '../../database/database.module.js';
 import { InboxService } from './inbox.service.js';
 import { JobQueueService, QUEUE_IDEMPOTENCY_CLEANUP } from './job-queue.service.js';
+import { OUTBOX_EVENTS_WITHOUT_CONSUMERS } from './messaging.types.js';
 import { OutboxService } from './outbox.service.js';
 
 const TEST_AUTH_SECRET = 'p1-08-messaging-test-auth-secret-at-least-32-chars';
@@ -681,6 +682,88 @@ describe('Messaging module integration tests (P1-08)', () => {
       } else {
         process.env['NODE_ENV'] = prevNodeEnv;
       }
+    }
+  });
+
+  it('R3: Allow-listed no-consumer events complete in 1 pass, unknown types dead-letter, and declared types deliver once handled', async () => {
+    const declaredType = 'test.declared.no_consumer_event';
+    const unknownType = 'test.undeclared.unknown_event';
+
+    outboxService.registerEventsWithoutConsumers([declaredType]);
+    try {
+      // 1. Declared event without a handler completes in 1 pass with outcome = 'no_consumer'
+      const declaredEvent = await db.transaction((tx) =>
+        outboxService.enqueue(tx, {
+          aggregateType: 'test',
+          aggregateId: 'agg-no-consumer-1',
+          eventType: declaredType,
+          payload: { ok: true },
+        }),
+      );
+
+      expect(await outboxService.relayBatch({ maxAttempts: 3, baseBackoffMs: 0 })).toBe(1);
+      const [noConsumerRow] = await db
+        .select()
+        .from(outboxEvents)
+        .where(eq(outboxEvents.id, declaredEvent.id));
+      expect(noConsumerRow?.publishedAt).not.toBeNull();
+      expect(noConsumerRow?.outcome).toBe('no_consumer');
+      expect(noConsumerRow?.attempts).toBe(0);
+      expect(noConsumerRow?.deadLetteredAt).toBeNull();
+      expect(noConsumerRow?.lastError).toBeNull();
+      expect(await outboxService.relayBatch({ maxAttempts: 3, baseBackoffMs: 0 })).toBe(0);
+
+      // 2. Undeclared unknown event without a handler retries and dead-letters
+      const unknownEvent = await db.transaction((tx) =>
+        outboxService.enqueue(tx, {
+          aggregateType: 'test',
+          aggregateId: 'agg-unknown-1',
+          eventType: unknownType,
+          payload: { ok: false },
+        }),
+      );
+
+      for (let i = 0; i < 3; i++) {
+        await outboxService.relayBatch({ maxAttempts: 3, baseBackoffMs: 0 });
+      }
+      const [deadUnknownRow] = await db
+        .select()
+        .from(outboxEvents)
+        .where(eq(outboxEvents.id, unknownEvent.id));
+      expect(deadUnknownRow?.publishedAt).toBeNull();
+      expect(deadUnknownRow?.outcome).toBeNull();
+      expect(deadUnknownRow?.attempts).toBe(3);
+      expect(deadUnknownRow?.deadLetteredAt).not.toBeNull();
+      expect(deadUnknownRow?.lastError).toContain(unknownType);
+
+      // 3. Declared type that later gains a handler is delivered normally
+      let deliveredCount = 0;
+      outboxService.registerHandler(declaredType, () => {
+        deliveredCount += 1;
+        return Promise.resolve();
+      });
+
+      const promotedEvent = await db.transaction((tx) =>
+        outboxService.enqueue(tx, {
+          aggregateType: 'test',
+          aggregateId: 'agg-promoted-1',
+          eventType: declaredType,
+          payload: { promoted: true },
+        }),
+      );
+
+      expect(await outboxService.relayBatch({ maxAttempts: 3, baseBackoffMs: 0 })).toBe(1);
+      expect(deliveredCount).toBe(1);
+      const [deliveredRow] = await db
+        .select()
+        .from(outboxEvents)
+        .where(eq(outboxEvents.id, promotedEvent.id));
+      expect(deliveredRow?.publishedAt).not.toBeNull();
+      expect(deliveredRow?.outcome).toBe('delivered');
+      expect(deliveredRow?.attempts).toBe(0);
+      expect(deliveredRow?.deadLetteredAt).toBeNull();
+    } finally {
+      OUTBOX_EVENTS_WITHOUT_CONSUMERS.delete(declaredType);
     }
   });
 });

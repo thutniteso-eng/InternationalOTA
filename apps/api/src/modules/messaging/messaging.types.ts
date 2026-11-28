@@ -8,6 +8,15 @@ export interface EnqueueOutboxEventInput {
   payload: Record<string, unknown>;
 }
 
+export type OutboxDeliveryOutcome = 'delivered' | 'no_consumer';
+
+/**
+ * Explicit allow-list registry of outbox event types emitted intentionally
+ * without an in-process outbox consumer yet. Emitter modules declare their own
+ * event-type lists alongside their types and register them on module init.
+ */
+export const OUTBOX_EVENTS_WITHOUT_CONSUMERS = new Set<string>();
+
 /**
  * Handler invoked by the outbox relay.
  *

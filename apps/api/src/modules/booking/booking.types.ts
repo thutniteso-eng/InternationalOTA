@@ -244,3 +244,9 @@ export interface AdminBookingDashboardMetrics {
   readonly today: AdminBookingDashboardWindowStats;
   readonly last7Days: AdminBookingDashboardWindowStats;
 }
+
+/**
+ * Informational booking outbox event types intentionally emitted without an
+ * in-process consumer yet.
+ */
+export const BOOKING_OUTBOX_EVENTS_WITHOUT_CONSUMERS = ['booking.payment_pending'] as const;

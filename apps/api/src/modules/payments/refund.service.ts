@@ -21,6 +21,7 @@ import { parseLocalDate } from '@internationalota/time';
 import { Inject, Injectable, Logger, type OnModuleInit, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { getRequestId } from '../../common/observability/request-context.js';
+import { requireAdminAuditPort } from '../../common/ports/admin-audit.helper.js';
 import { DRIZZLE_DB } from '../../database/database.module.js';
 import {
   bookingInvalidQueryException,
@@ -143,6 +144,11 @@ export class RefundService
       } catch {
         this.adminAuditPort = null;
       }
+    }
+    if (!this.adminAuditPort) {
+      this.logger.warn(
+        'ADMIN_AUDIT_PORT is not bound in RefundService; admin refund_retry and departure_cancel will fail closed with 503.',
+      );
     }
     this.outboxService.registerHandler('payment.refund_required', async (event) => {
       await this.handlePaymentRefundRequiredEvent(event);
@@ -468,7 +474,13 @@ export class RefundService
         }
       }
 
-      await this.adminAuditPort?.recordAudit(tx, {
+      const auditPort = requireAdminAuditPort(
+        this.adminAuditPort,
+        this.logger,
+        'departure_cancel',
+        departureId,
+      );
+      await auditPort.recordAudit(tx, {
         actorUserId: adminUserId,
         action: 'departure_cancel',
         targetType: 'departure',
@@ -1164,7 +1176,13 @@ export class RefundService
         throw paymentRefundNotRetryableException();
       }
 
-      await this.adminAuditPort?.recordAudit(tx, {
+      const auditPort = requireAdminAuditPort(
+        this.adminAuditPort,
+        this.logger,
+        'refund_retry',
+        updated.id,
+      );
+      await auditPort.recordAudit(tx, {
         actorUserId: adminUserId,
         action: 'refund_retry',
         targetType: 'refund',

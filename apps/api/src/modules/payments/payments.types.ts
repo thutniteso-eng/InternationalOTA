@@ -169,3 +169,20 @@ export interface LedgerPaymentExpectationPort {
     asOf: Date,
   ): Promise<ReadonlyMap<string, PaymentCurrencyExpectedTotals>>;
 }
+
+/**
+ * Informational payment/refund outbox event types intentionally emitted without
+ * an in-process outbox consumer yet (refund execution and cancellation are driven
+ * via pg-boss jobs / webhook handlers).
+ */
+export const PAYMENTS_OUTBOX_EVENTS_WITHOUT_CONSUMERS = [
+  'payment.initiated',
+  'payment.succeeded',
+  'payment.failed',
+  'payment.expired',
+  'payment.amount_mismatch',
+  'refund.requested',
+  'refund.failed',
+  'refund.manual_review',
+  'refund.retry_requested',
+] as const;

@@ -1,0 +1,1 @@
+ALTER TABLE "platform"."outbox_events" ADD COLUMN "outcome" text;

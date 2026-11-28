@@ -12,6 +12,7 @@
     "test": "vitest run",
     "demo:load": "pnpm build && node dist/scripts/demo-load.js",
     "staging:cleanup-test-data": "pnpm build && node dist/scripts/staging-cleanup-test-data.js",
+    "staging:outbox-cleanup": "pnpm build && node dist/scripts/staging-outbox-cleanup.js",
     "admin:grant": "pnpm build && node dist/scripts/admin-grant.js",
     "format:check": "prettier --check src test"
   },

@@ -9,11 +9,17 @@ Implemented cross-module daily/manual reconciliation (`ops` module), immutable o
 - **[ops.ts](file:///home/iteso/projects/InternationalOTA/packages/db/src/schema/ops.ts)** & **[schema/index.ts](file:///home/iteso/projects/InternationalOTA/packages/db/src/schema/index.ts):** Added `ops.reconciliation_runs`, `ops.reconciliation_findings`, and `ops.admin_audit`.
 - **[0019_fast_stepford_cuckoos.sql](file:///home/iteso/projects/InternationalOTA/packages/db/migrations/0019_fast_stepford_cuckoos.sql):** Creates the `ops` schema tables, indexes, and foreign key (`finding.run_id -> reconciliation_runs.id`).
 - **[0020_ops_immutability_triggers.sql](file:///home/iteso/projects/InternationalOTA/packages/db/migrations/0020_ops_immutability_triggers.sql):** Enforces append-only immutability on `ops.admin_audit` and `ops.reconciliation_findings` (blocks `UPDATE`/`DELETE`), and restricts `ops.reconciliation_runs` updates to terminal transitions (`running` -> `ok` | `warnings` | `errors`) while blocking `DELETE`.
+- **[0021_cooing_marauders.sql](file:///home/iteso/projects/InternationalOTA/packages/db/migrations/0021_cooing_marauders.sql):** Adds nullable `outcome text` column on `platform.outbox_events` (`'delivered' | 'no_consumer'`).
 - **[roles.ts](file:///home/iteso/projects/InternationalOTA/packages/db/src/roles.ts):** Granted `ota_app` `SELECT, INSERT, UPDATE` on `ops.reconciliation_runs` and `SELECT, INSERT` on `ops.reconciliation_findings` and `ops.admin_audit`.
 
 ### Module Boundaries & Reconciliation Orchestration (`ops`)
 
 - **[packages/shared/src/index.ts](file:///home/iteso/projects/InternationalOTA/packages/shared/src/index.ts):** Defined public cross-module port symbols (`ADMIN_AUDIT_PORT`, `BOOKING_SEAT_SUMS_PORT`, `LEDGER_BOOKING_EXPECTATION_PORT`, `LEDGER_PAYMENT_EXPECTATION_PORT`, `BOOKING_ADMIN_PAYMENT_PORT`, `BOOKING_ADMIN_NOTIFICATION_PORT`, `OPS_RECONCILIATION_WORKER_PORT`, `ReconciliationFinding`).
+- **[admin-audit.helper.ts](file:///home/iteso/projects/InternationalOTA/apps/api/src/common/ports/admin-audit.helper.ts):** Enforces fail-closed `ADMIN_AUDIT_PORT` resolution inside admin mutation transactions (`InventoryService.closeDeparture`, `InventoryService.reopenDeparture`, `RefundService.cancelDeparture`, `RefundService.adminRetryRefund`), logging an error and throwing HTTP `503` (`ops.audit.unavailable`) with full transaction rollback if unbound.
+- **Outbox No-Consumer Allow-List ([messaging.types.ts](file:///home/iteso/projects/InternationalOTA/apps/api/src/modules/messaging/messaging.types.ts), [outbox.service.ts](file:///home/iteso/projects/InternationalOTA/apps/api/src/modules/messaging/outbox.service.ts)):**
+  - `OUTBOX_EVENTS_WITHOUT_CONSUMERS` registry populated on module init from emitter declarations (`BOOKING_OUTBOX_EVENTS_WITHOUT_CONSUMERS`, `PAYMENTS_OUTBOX_EVENTS_WITHOUT_CONSUMERS`, `OPS_OUTBOX_EVENTS_WITHOUT_CONSUMERS`).
+  - Events in `OUTBOX_EVENTS_WITHOUT_CONSUMERS` with no registered handler complete in 1 pass (`published_at = now()`, `outcome = 'no_consumer'`, `attempts = 0`); undeclared unhandled types still retry and dead-letter; declared types that gain a handler deliver normally (`outcome = 'delivered'`).
+- **[staging-outbox-cleanup.ts](file:///home/iteso/projects/InternationalOTA/apps/api/src/scripts/staging-outbox-cleanup.ts) (`pnpm staging:outbox-cleanup`):** Guarded staging-only script (refuses `APP_ENV=production`) marking historical dead-lettered no-consumer rows as `outcome = 'no_consumer'`.
 - **Owning modules (`runReconciliationChecks(asOf)`):**
   - [inventory.service.ts](file:///home/iteso/projects/InternationalOTA/apps/api/src/modules/inventory/inventory.service.ts) & [inventory-admin.controller.ts](file:///home/iteso/projects/InternationalOTA/apps/api/src/modules/inventory/inventory-admin.controller.ts)
   - [booking.service.ts](file:///home/iteso/projects/InternationalOTA/apps/api/src/modules/booking/booking.service.ts) & [booking-admin.controller.ts](file:///home/iteso/projects/InternationalOTA/apps/api/src/modules/booking/booking-admin.controller.ts) (including PII redaction on list responses and explicit customer contact on `GET /admin/bookings/:reference`)
@@ -53,8 +59,8 @@ Implemented cross-module daily/manual reconciliation (`ops` module), immutable o
 
 | Owning Module | Check Code | Severity | Invariant Checked |
 | --- | --- | --- | --- |
-| `inventory` | `INVENTORY_VERIFY_ALLOCATED_MISMATCH` | `error` | `inventory.verify_allocated()` returns empty |
-| `inventory` | `INVENTORY_BOOKING_SEAT_SUM_MISMATCH` | `error` | `departures.allocated` equals `SUM(booking.seats)` across active holds/bookings |
+| `inventory` | `INVENTORY_VERIFY_ALLOCATED_MISMATCH` | `error` | `inventory.verify_allocated()` returns empty (evaluates live state; documented on method) |
+| `inventory` | `INVENTORY_BOOKING_SEAT_SUM_MISMATCH` | `error` | `departures.allocated` equals `SUM(booking.seats)` across active holds/bookings (evaluates live state) |
 | `payments` | `BOOKING_CONFIRMED_MISSING_SUCCEEDED_ATTEMPT` | `error` | Every `confirmed` booking has a `succeeded` payment attempt |
 | `payments` | `BOOKING_CONFIRMED_MULTIPLE_SUCCEEDED_ATTEMPTS` | `error` | No `confirmed` booking has >1 `succeeded` payment attempt |
 | `payments` | `PAYMENT_AMOUNT_MISMATCH` | `error` | Succeeded payment amount matches `booking.total_minor` |
@@ -87,6 +93,7 @@ All four required mutations were injected, executed against [ops.spec.ts](file:/
 | **(b)** | `apps/api/src/modules/booking/booking.service.ts` | Included `'cancelled'` in `getConfirmedTotalsByCurrency` | **Killed** by `AC1` at `ops.spec.ts:560:36` (`expected 'errors' to be 'ok'`) |
 | **(c)** | `apps/api/src/modules/ops/ops.service.ts` | Bypassed the `pg_try_advisory_lock` contention guard | **Killed** by `AC4` at `ops.spec.ts:1006:60` (`expected 200 to be 409`) |
 | **(d)** | `apps/api/src/modules/payments/refund.service.ts` | Wrote `ops.admin_audit` on `this.db` outside the rollback `tx` | **Killed** by `AC6` at `ops.spec.ts:1036:26` (`expected [ { …(8) } ] to have a length of +0 but got 1`) |
+| **(R2)** | `apps/api/src/modules/inventory/inventory.service.ts` | Wrapped `departure_close` `recordAudit` call in `if (false)` | **Killed** by `AC6` at `ops.spec.ts:1078:25` (`expected [] to have a length of 1 but got +0`) and `R1` at `ops.spec.ts:1281:30` |
 
 ### Module Boundary Proof (`lint:boundaries`)
 
@@ -103,12 +110,13 @@ All four required mutations were injected, executed against [ops.spec.ts](file:/
   ```json
   {"granted":true,"userId":"hIUKGxjrzuJ5NKr9HX7g30c1Wd56lmTm","email":"p210-staging-admin@example.com","role":"admin","auditId":"01a21fad-6e1b-7c59-823f-b38a338ef24f","appEnv":"staging"}
   ```
-- **Manual staging reconciliation (`POST /api/admin/reconciliation/runs`):**
-  - Run ID: `01a21fad-707e-7bed-a7fc-e78cc1f331ef`
-  - Status: `"warnings"`
-  - Counts: `{"checks":6,"errors":0,"warnings":31,"totalFindings":31}`
-  - Triggered by: `"admin:hIUKGxjrzuJ5NKr9HX7g30c1Wd56lmTm"`
-  - Findings: 31 `OUTBOX_STUCK_OR_DEAD_LETTER` warnings from historical pre-existing staging outbox rows (`attempts: 10`, `deadLettered: true`); 0 errors across inventory, booking, payments, ledger, and notifications.
+- **Manual staging reconciliation (`POST /api/admin/reconciliation/runs`, pre-R3):**
+  - Run ID: `01a21fad-707e-7bed-a7fc-e78cc1f331ef` (`status: "warnings"`, `0` errors, `31` `OUTBOX_STUCK_OR_DEAD_LETTER` warnings from historical pre-existing unhandled outbox rows).
+- **Staging outbox cleanup + Post-R3 verification run (`POST /api/admin/reconciliation/runs`):**
+  - Cleanup script (`node apps/api/dist/scripts/staging-outbox-cleanup.js --include-legacy-unhandled`): `{"ok":true,"appEnv":"staging","declaredUpdated":25,"legacyUnhandledUpdated":6,"totalUpdated":31}`.
+  - Post-R3 Run ID: `01a21fdf-606f-753c-9c64-1d0f3f766c18`
+  - Status: `"ok"`
+  - Counts: `{"checks":6,"errors":0,"warnings":0,"totalFindings":0}` (`findings: []`).
 
 ---
 
