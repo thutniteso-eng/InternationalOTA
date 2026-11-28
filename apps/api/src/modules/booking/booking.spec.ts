@@ -1613,4 +1613,56 @@ describe('Booking aggregate, state machine & expiring holds (P2-04)', () => {
     expect(adminResult.ids).toEqual(expectedDescIds);
     expect(new Set(adminResult.ids).size).toBe(5);
   }, 30_000);
+
+  it('D1: Malformed cursor createdAt (invalid ISO or impossible date) returns 400 booking_invalid_query, not 500', async () => {
+    const validId = '01950000-0000-7000-8000-000000000001';
+    const malformedCursors = [
+      'not-base64-json',
+      Buffer.from(JSON.stringify({ createdAt: 'not-a-timestamp', id: validId }), 'utf8').toString(
+        'base64url',
+      ),
+      Buffer.from(
+        JSON.stringify({ createdAt: '2026-11-28T01:02:03.1234567Z', id: validId }),
+        'utf8',
+      ).toString('base64url'),
+      Buffer.from(
+        JSON.stringify({ createdAt: '2026-02-30T00:00:00Z', id: validId }),
+        'utf8',
+      ).toString('base64url'),
+      Buffer.from(
+        JSON.stringify({ createdAt: '2026-11-28 01:02:03', id: validId }),
+        'utf8',
+      ).toString('base64url'),
+    ];
+
+    for (const badCursor of malformedCursors) {
+      const custRes = await fetch(
+        `${baseUrl}/me/bookings?cursor=${encodeURIComponent(badCursor)}`,
+        {
+          headers: { Cookie: customerACookie },
+        },
+      );
+      expect(custRes.status).toBe(400);
+      const custBody = (await custRes.json()) as {
+        code?: string;
+        errorCode?: string;
+        status?: number;
+      };
+      expect(custBody.code ?? custBody.errorCode).toBe('booking_invalid_query');
+
+      const adminRes = await fetch(
+        `${baseUrl}/admin/bookings?cursor=${encodeURIComponent(badCursor)}`,
+        {
+          headers: { Cookie: adminCookie },
+        },
+      );
+      expect(adminRes.status).toBe(400);
+      const adminBody = (await adminRes.json()) as {
+        code?: string;
+        errorCode?: string;
+        status?: number;
+      };
+      expect(adminBody.code ?? adminBody.errorCode).toBe('booking_invalid_query');
+    }
+  });
 });

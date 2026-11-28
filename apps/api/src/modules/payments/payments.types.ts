@@ -57,6 +57,7 @@ export interface PaymentProvider extends WebhookVerifier {
   verify(rawBody: Buffer, headers: IncomingHttpHeaders): WebhookVerificationResult;
   verifyWebhook(rawBody: Buffer, headers: IncomingHttpHeaders): PaymentVerificationResult;
   getStatus(providerRef: string): Promise<PaymentVerificationResult | 'pending'>;
+  getCheckoutByAttemptId?(attemptId: string): Promise<{ readonly providerRef: string } | null>;
 }
 
 export interface InitiateCheckoutRequestDto {
@@ -111,6 +112,21 @@ export interface DepartureCancelResultDto {
   readonly activeHoldsCancelledCount: number;
   readonly confirmedJobsEnqueuedCount: number;
   readonly totalBookingsMatched: number;
+}
+
+export interface RejectBookingRequestDto {
+  readonly reason: string;
+}
+
+export interface RejectBookingResultDto {
+  readonly bookingId: string;
+  readonly bookingReference: string;
+  readonly bookingStatus: 'cancelled';
+  readonly refundId: string | null;
+  readonly refundStatus: string | null;
+  readonly refundAmountMinor: string;
+  readonly currency: string;
+  readonly reason: string;
 }
 
 export interface BookingCancellationPreviewDto {

@@ -23,6 +23,8 @@ import type {
   DepartureCancellationSummaryDto,
   DepartureCancelRequestDto,
   DepartureCancelResultDto,
+  RejectBookingRequestDto,
+  RejectBookingResultDto,
 } from './payments.types.js';
 import { RefundService } from './refund.service.js';
 
@@ -61,6 +63,17 @@ export class RefundAdminController {
     @Param('id') departureId: string,
   ): Promise<DepartureCancellationSummaryDto> {
     return this.refundService.getDepartureCancellationSummary(departureId);
+  }
+
+  @Post('bookings/:reference/reject')
+  @Idempotent()
+  @HttpCode(HttpStatus.OK)
+  async rejectBooking(
+    @CurrentPrincipal() principal: Principal,
+    @Param('reference') reference: string,
+    @Body() body?: RejectBookingRequestDto,
+  ): Promise<RejectBookingResultDto> {
+    return this.refundService.rejectConfirmedBooking(reference, principal.userId, body?.reason);
   }
 
   @Post('refunds/:id/retry')

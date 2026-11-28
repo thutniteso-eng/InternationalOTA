@@ -44,6 +44,7 @@ export type MockPspRefundMode = (typeof MOCK_PSP_REFUND_MODES)[number];
 export const REFUND_REASONS = [
   'customer_cancellation',
   'departure_cancelled',
+  'supplier_rejected',
   'late_payment',
   'double_payment',
 ] as const;
@@ -166,7 +167,7 @@ export const paymentsRefunds = paymentsSchema.table(
     check('refunds_amount_positive', sql`amount_minor > 0`),
     check(
       'refunds_reason_check',
-      sql`reason IN ('customer_cancellation', 'departure_cancelled', 'late_payment', 'double_payment')`,
+      sql`reason IN ('customer_cancellation', 'departure_cancelled', 'supplier_rejected', 'late_payment', 'double_payment')`,
     ),
     check(
       'refunds_status_check',

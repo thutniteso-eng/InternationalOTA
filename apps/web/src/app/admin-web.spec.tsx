@@ -225,6 +225,23 @@ describe('Admin console UI (P2-10 AC9)', () => {
     expect(html).toContain('manual_review');
     expect(html).toContain('PSP timeout');
     expect(html).toContain('booking_confirmed');
+    expect(html).not.toContain('Từ chối đơn');
+
+    const confirmedHtmlVi = renderToStaticMarkup(
+      <AdminBookingDetailView
+        locale="vi"
+        booking={{ ...SAMPLE_BOOKING_DETAIL, status: 'confirmed', cancelledAt: null }}
+      />,
+    );
+    expect(confirmedHtmlVi).toContain('Từ chối đơn');
+
+    const confirmedHtmlEn = renderToStaticMarkup(
+      <AdminBookingDetailView
+        locale="en"
+        booking={{ ...SAMPLE_BOOKING_DETAIL, status: 'confirmed', cancelledAt: null }}
+      />,
+    );
+    expect(confirmedHtmlEn).toContain('Reject booking');
   });
 
   it('uses zero window.alert / window.confirm calls across apps/web/src', () => {

@@ -1,4 +1,4 @@
-import { createIsolatedTestDatabase, type TestDbInstance } from '@internationalota/db';
+import { createIsolatedTestDatabase, type TestDbInstance } from '@internationalota/db/testing';
 
 export type { TestDbInstance };
 

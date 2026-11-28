@@ -14,9 +14,11 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { resolveAppEnv } from '@internationalota/shared';
+import { FaultInjector } from '../../common/fault-injection/index.js';
 import { DRIZZLE_DB } from '../../database/database.module.js';
 import {
   calculateExponentialBackoffMs,
@@ -47,7 +49,10 @@ export class InboxService {
   private readonly inFlight = new Set<Promise<unknown>>();
   private shuttingDown = false;
 
-  constructor(@Inject(DRIZZLE_DB) private readonly db: DatabaseClient) {
+  constructor(
+    @Inject(DRIZZLE_DB) private readonly db: DatabaseClient,
+    @Optional() @Inject(FaultInjector) private readonly faultInjector?: FaultInjector,
+  ) {
     const appEnv = resolveAppEnv();
     if (
       process.env['NODE_ENV'] !== 'production' &&
@@ -133,6 +138,8 @@ export class InboxService {
       .returning({ providerEventId: inboxMessages.providerEventId });
 
     const duplicate = inserted.length === 0;
+
+    this.faultInjector?.maybeFail('webhook.after_inbox_insert_before_handler');
 
     // Log metadata only — NEVER log raw payload (may contain PII)
     this.logger.log(

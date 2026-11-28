@@ -23,9 +23,9 @@ import {
   BOOKING_ADMIN_NOTIFICATION_PORT,
   BOOKING_ADMIN_PAYMENT_PORT,
   type ReconciliationFinding,
+  resolveAppEnv,
 } from '@internationalota/shared';
 import {
-  BadRequestException,
   Inject,
   Injectable,
   Logger,
@@ -165,6 +165,18 @@ interface BookingCursor {
   readonly id: string;
 }
 
+const CURSOR_CREATED_AT_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/;
+
+function isValidIsoTimestampWithUpToSixFractionDigits(value: string): boolean {
+  if (!CURSOR_CREATED_AT_REGEX.test(value)) {
+    return false;
+  }
+  const parsed = new Date(value);
+  return (
+    !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value.slice(0, 10)
+  );
+}
+
 function encodeBookingCursor(cursor: BookingCursor): string {
   return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
 }
@@ -178,6 +190,7 @@ function decodeBookingCursor(raw: string): BookingCursor {
     const rec = parsed as Record<string, unknown>;
     if (
       typeof rec['createdAt'] !== 'string' ||
+      !isValidIsoTimestampWithUpToSixFractionDigits(rec['createdAt']) ||
       typeof rec['id'] !== 'string' ||
       !UUID_REGEX.test(rec['id'])
     ) {
@@ -185,12 +198,7 @@ function decodeBookingCursor(raw: string): BookingCursor {
     }
     return { createdAt: rec['createdAt'], id: rec['id'] };
   } catch {
-    throw new BadRequestException({
-      message: 'Invalid booking pagination cursor',
-      i18nKey: 'booking.query.invalidParams',
-      i18nParams: { reason: 'invalid cursor' },
-      errorCode: 'booking_invalid_query',
-    });
+    throw bookingInvalidQueryException('invalid cursor');
   }
 }
 
@@ -1280,23 +1288,38 @@ export class BookingService
     return row ? toBookingDetailDto(row) : null;
   }
 
-  async expireDue(options: { readonly limit?: number } = {}): Promise<BookingExpiryResult> {
+  async expireDue(
+    options: { readonly limit?: number; readonly asOf?: Date } = {},
+  ): Promise<BookingExpiryResult> {
     const rawLimit = options.limit ?? DEFAULT_EXPIRY_LIMIT;
     const limit = Math.min(Math.max(1, Math.trunc(rawLimit)), MAX_EXPIRY_LIMIT);
+    const effectiveAsOf = options.asOf && resolveAppEnv() === 'test' ? options.asOf : undefined;
     let expiredCount = 0;
     let skippedCount = 0;
 
     for (let i = 0; i < limit; i++) {
       const stepOutcome = await this.db.transaction(async (tx) => {
-        const dueRes = await tx.execute(sql`
-          SELECT id
-          FROM booking.bookings
-          WHERE status IN ('held', 'payment_pending')
-            AND hold_expires_at <= now()
-          ORDER BY hold_expires_at ASC, id ASC
-          LIMIT 1
-          FOR UPDATE SKIP LOCKED
-        `);
+        const dueRes = await tx.execute(
+          effectiveAsOf
+            ? sql`
+                SELECT id
+                FROM booking.bookings
+                WHERE status IN ('held', 'payment_pending')
+                  AND hold_expires_at <= ${effectiveAsOf}
+                ORDER BY hold_expires_at ASC, id ASC
+                LIMIT 1
+                FOR UPDATE SKIP LOCKED
+              `
+            : sql`
+                SELECT id
+                FROM booking.bookings
+                WHERE status IN ('held', 'payment_pending')
+                  AND hold_expires_at <= now()
+                ORDER BY hold_expires_at ASC, id ASC
+                LIMIT 1
+                FOR UPDATE SKIP LOCKED
+              `,
+        );
         const dueRow = dueRes.rows[0];
         if (!dueRow) {
           return 'empty' as const;
@@ -1557,6 +1580,23 @@ export class BookingService
     }
 
     return this.listBookingsPage(conditions, query, true);
+  }
+
+  async getBookingIdByReference(
+    rawReference: string,
+    tx?: DatabaseTransaction,
+  ): Promise<string | null> {
+    const reference = normalizeBookingReference(rawReference);
+    if (!reference) {
+      return null;
+    }
+    const runner = tx ?? this.db;
+    const [row] = await runner
+      .select({ id: bookingBookings.id })
+      .from(bookingBookings)
+      .where(eq(bookingBookings.reference, reference))
+      .limit(1);
+    return row?.id ?? null;
   }
 
   async getAdminBookingByReference(rawReference: string): Promise<AdminBookingDetailDto> {

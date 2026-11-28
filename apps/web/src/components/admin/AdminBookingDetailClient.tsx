@@ -2,16 +2,76 @@
 
 import { formatInstant, formatLocalDate, t, type BuiltinLocale } from '@internationalota/i18n';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import { adminApiFetch, formatAdminMoneyMinor, type AdminBookingDetailDto } from '@/lib/admin-api';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  adminApiFetch,
+  createAdminIdempotencyKey,
+  formatAdminMoneyMinor,
+  type AdminBookingDetailDto,
+  type RejectBookingResultDto,
+} from '@/lib/admin-api';
 
 export function AdminBookingDetailView({
   locale,
   booking,
+  onReload,
+  fetchFn = fetch,
 }: {
   readonly locale: BuiltinLocale;
   readonly booking: AdminBookingDetailDto;
+  readonly onReload?: () => Promise<void>;
+  readonly fetchFn?: typeof fetch;
 }): React.JSX.Element {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+
+  async function handleRejectSubmit(e: React.FormEvent): Promise<void> {
+    e.preventDefault();
+    const trimmed = reason.trim();
+    if (!trimmed) {
+      setActionError(t(locale, 'admin.common.reasonRequiredError'));
+      return;
+    }
+
+    setSubmitting(true);
+    setActionError(null);
+    setActionSuccess(null);
+
+    const res = await adminApiFetch<RejectBookingResultDto>(
+      `/api/admin/bookings/${encodeURIComponent(booking.reference)}/reject`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': createAdminIdempotencyKey('admin-reject'),
+        },
+        body: JSON.stringify({ reason: trimmed }),
+      },
+      fetchFn,
+    );
+    setSubmitting(false);
+
+    if (!res.ok) {
+      setActionError(res.message ?? t(locale, 'admin.common.actionError'));
+      return;
+    }
+
+    setConfirmOpen(false);
+    setReason('');
+    setActionSuccess(
+      t(locale, 'admin.bookingDetail.rejectSuccess', {
+        reference: res.data.bookingReference,
+        refundId: res.data.refundId ?? '—',
+      }),
+    );
+    if (onReload) {
+      await onReload();
+    }
+  }
+
   return (
     <div className="adminStack">
       <p>
@@ -50,6 +110,67 @@ export function AdminBookingDetailView({
             </>
           ) : null}
         </p>
+        {actionSuccess ? (
+          <div className="statusBannerOk" role="status">
+            {actionSuccess}
+          </div>
+        ) : null}
+        {booking.status === 'confirmed' ? (
+          <div className="panelActions">
+            <button
+              type="button"
+              className="secondaryButton"
+              onClick={() => {
+                setConfirmOpen((prev) => !prev);
+                setActionError(null);
+              }}
+            >
+              {t(locale, 'admin.bookingDetail.rejectButton')}
+            </button>
+          </div>
+        ) : null}
+        {confirmOpen && booking.status === 'confirmed' ? (
+          <form className="adminConfirmPanel" onSubmit={(e) => void handleRejectSubmit(e)}>
+            <h2 className="sectionHeading">
+              {t(locale, 'admin.bookingDetail.confirmRejectTitle')}
+            </h2>
+            <p className="resultMeta">{t(locale, 'admin.bookingDetail.confirmRejectHint')}</p>
+            <label className="adminFieldLabel">
+              <span>{t(locale, 'admin.common.reasonLabel')}</span>
+              <input
+                type="text"
+                className="adminInput"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder={t(locale, 'admin.common.reasonPlaceholder')}
+                disabled={submitting}
+              />
+            </label>
+            {actionError ? (
+              <div className="errorBox" role="alert">
+                {actionError}
+              </div>
+            ) : null}
+            <div className="panelActions">
+              <button type="submit" className="primaryButton" disabled={submitting}>
+                {submitting
+                  ? t(locale, 'admin.common.loading')
+                  : t(locale, 'admin.bookingDetail.confirmRejectSubmit')}
+              </button>
+              <button
+                type="button"
+                className="secondaryButton"
+                disabled={submitting}
+                onClick={() => {
+                  setConfirmOpen(false);
+                  setActionError(null);
+                }}
+              >
+                {t(locale, 'admin.common.cancelAction')}
+              </button>
+            </div>
+          </form>
+        ) : null}
       </section>
 
       <section className="widgetCard" data-testid="admin-booking-contact">
@@ -176,31 +297,25 @@ export function AdminBookingDetailClient({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    async function load(): Promise<void> {
-      setLoading(true);
-      const res = await adminApiFetch<AdminBookingDetailDto>(
-        `/api/admin/bookings/${encodeURIComponent(reference)}`,
-        {},
-        fetchFn,
-      );
-      if (!active) {
-        return;
-      }
-      if (!res.ok) {
-        setError(res.message ?? t(locale, 'admin.common.actionError'));
-        setLoading(false);
-        return;
-      }
-      setBooking(res.data);
+  const load = useCallback(async (): Promise<void> => {
+    setLoading(true);
+    const res = await adminApiFetch<AdminBookingDetailDto>(
+      `/api/admin/bookings/${encodeURIComponent(reference)}`,
+      {},
+      fetchFn,
+    );
+    if (!res.ok) {
+      setError(res.message ?? t(locale, 'admin.common.actionError'));
       setLoading(false);
+      return;
     }
-    void load();
-    return () => {
-      active = false;
-    };
+    setBooking(res.data);
+    setLoading(false);
   }, [fetchFn, locale, reference]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   if (loading) {
     return <p className="resultMeta">{t(locale, 'admin.common.loading')}</p>;
@@ -213,5 +328,7 @@ export function AdminBookingDetailClient({
     );
   }
 
-  return <AdminBookingDetailView locale={locale} booking={booking} />;
+  return (
+    <AdminBookingDetailView locale={locale} booking={booking} onReload={load} fetchFn={fetchFn} />
+  );
 }

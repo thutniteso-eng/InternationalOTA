@@ -34,5 +34,7 @@ export type {
   PaymentProvider,
   PaymentVerificationResult,
   RefundVerificationResult,
+  RejectBookingRequestDto,
+  RejectBookingResultDto,
 } from './payments.types.js';
 export { RefundService } from './refund.service.js';

@@ -23,5 +23,4 @@ export * from './grant-role.ts';
 export * from './migrate.ts';
 export * from './roles.ts';
 export * from './seed.ts';
-export * from './test-database.ts';
 export * from './schema/index.ts';

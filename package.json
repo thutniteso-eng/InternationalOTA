@@ -25,6 +25,7 @@
     "lint": "pnpm build:packages && pnpm -r run lint && eslint tools",
     "lint:boundaries": "depcruise apps/api/src --config .dependency-cruiser.cjs",
     "test": "pnpm build:packages && pnpm -r run test && vitest run tools",
+    "test:failure-scenarios": "pnpm build:packages && pnpm --filter @internationalota/api run test:failure-scenarios",
     "typecheck": "pnpm build:packages && pnpm -r run typecheck"
   },
   "devDependencies": {

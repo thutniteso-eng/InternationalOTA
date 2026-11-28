@@ -123,6 +123,17 @@ export class MockPaymentProvider implements PaymentProvider, MockPspDelayedCallb
     };
   }
 
+  async getCheckoutByAttemptId(
+    attemptId: string,
+  ): Promise<{ readonly providerRef: string } | null> {
+    const [row] = await this.db
+      .select({ providerRef: paymentsMockPspTransactions.providerRef })
+      .from(paymentsMockPspTransactions)
+      .where(eq(paymentsMockPspTransactions.attemptId, attemptId))
+      .limit(1);
+    return row ? { providerRef: row.providerRef } : null;
+  }
+
   verify(rawBody: Buffer, headers: IncomingHttpHeaders): WebhookVerificationResult {
     const body = this.verifyHmacAndParseJson(rawBody, headers);
     const eventType = typeof body['eventType'] === 'string' ? body['eventType'].trim() : '';
