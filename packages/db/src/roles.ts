@@ -33,7 +33,7 @@ export async function applyRuntimeRoleGrants(
 
   await db.execute(
     sql.raw(
-      `GRANT USAGE ON SCHEMA reference, identity, platform, finance, supply, catalog, inventory, pricing, booking, payments, notifications TO ${roleIdent};`,
+      `GRANT USAGE ON SCHEMA reference, identity, platform, finance, supply, catalog, inventory, pricing, booking, payments, notifications, ops TO ${roleIdent};`,
     ),
   );
   await db.execute(sql.raw(`GRANT SELECT ON ALL TABLES IN SCHEMA reference TO ${roleIdent};`));
@@ -95,13 +95,21 @@ export async function applyRuntimeRoleGrants(
     ),
   );
   await db.execute(
+    sql.raw(`GRANT SELECT, INSERT, UPDATE ON TABLE ops.reconciliation_runs TO ${roleIdent};`),
+  );
+  await db.execute(
     sql.raw(
-      `GRANT USAGE ON ALL SEQUENCES IN SCHEMA reference, identity, platform, finance, supply, catalog, inventory, pricing, booking, payments, notifications TO ${roleIdent};`,
+      `GRANT SELECT, INSERT ON TABLE ops.reconciliation_findings, ops.admin_audit TO ${roleIdent};`,
     ),
   );
   await db.execute(
     sql.raw(
-      `GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA finance, catalog, inventory, pricing, booking, payments, notifications TO ${roleIdent};`,
+      `GRANT USAGE ON ALL SEQUENCES IN SCHEMA reference, identity, platform, finance, supply, catalog, inventory, pricing, booking, payments, notifications, ops TO ${roleIdent};`,
+    ),
+  );
+  await db.execute(
+    sql.raw(
+      `GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA finance, catalog, inventory, pricing, booking, payments, notifications, ops TO ${roleIdent};`,
     ),
   );
 

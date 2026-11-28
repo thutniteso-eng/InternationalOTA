@@ -109,6 +109,7 @@ export interface CustomerBookingListResponse {
 
 export interface AdminBookingListQuery {
   readonly status?: string;
+  readonly productId?: string;
   readonly departureId?: string;
   readonly reference?: string;
   readonly from?: string;
@@ -160,3 +161,92 @@ export interface BookingNotificationContext {
   readonly booking: BookingDetailDto;
   readonly cancellationReason: string | null;
 }
+
+export interface BookingSeatSumsPort {
+  getActiveSeatSumsByDeparture(): Promise<ReadonlyMap<string, number>>;
+}
+
+export interface LedgerBookingExpectationPort {
+  getConfirmedTotalsByCurrency(asOf: Date): Promise<ReadonlyMap<string, bigint>>;
+}
+
+export interface BookingReconciliationSnapshot {
+  readonly id: string;
+  readonly reference: string;
+  readonly status: BookingStatus;
+  readonly totalAmountMinor: bigint;
+  readonly currency: string;
+  readonly paymentRef: string | null;
+}
+
+export interface AdminBookingAttemptSummary {
+  readonly id: string;
+  readonly provider: string;
+  readonly providerRef: string | null;
+  readonly amountMinor: string;
+  readonly currency: string;
+  readonly status: string;
+  readonly failureReason: string | null;
+  readonly createdAt: string;
+  readonly completedAt: string | null;
+}
+
+export interface AdminBookingRefundSummary {
+  readonly id: string;
+  readonly paymentAttemptId: string;
+  readonly provider: string;
+  readonly amountMinor: string;
+  readonly currency: string;
+  readonly reason: string;
+  readonly status: string;
+  readonly providerRefundRef: string | null;
+  readonly attempts: number;
+  readonly lastError: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly completedAt: string | null;
+}
+
+export interface BookingAdminPaymentPort {
+  getAdminBookingRecords(bookingId: string): Promise<{
+    readonly attempts: readonly AdminBookingAttemptSummary[];
+    readonly refunds: readonly AdminBookingRefundSummary[];
+  }>;
+}
+
+export interface AdminBookingDetailEmailDto {
+  readonly id: string;
+  readonly template: string;
+  readonly locale: string;
+  readonly status: string;
+  readonly attempts: number;
+  readonly lastError: string | null;
+  readonly sentAt: string | null;
+  readonly createdAt: string;
+}
+
+export interface AdminBookingDetailDto extends BookingDetailDto {
+  readonly attempts: readonly AdminBookingAttemptSummary[];
+  readonly refunds: readonly AdminBookingRefundSummary[];
+  readonly emails: readonly AdminBookingDetailEmailDto[];
+}
+
+export interface AdminBookingDashboardWindowStats {
+  readonly byStatus: Record<BookingStatus, number>;
+  readonly totalBookings: number;
+  readonly confirmedRevenueByCurrency: readonly {
+    readonly currency: string;
+    readonly totalAmountMinor: string;
+  }[];
+}
+
+export interface AdminBookingDashboardMetrics {
+  readonly today: AdminBookingDashboardWindowStats;
+  readonly last7Days: AdminBookingDashboardWindowStats;
+}
+
+/**
+ * Informational booking outbox event types intentionally emitted without an
+ * in-process consumer yet.
+ */
+export const BOOKING_OUTBOX_EVENTS_WITHOUT_CONSUMERS = ['booking.payment_pending'] as const;

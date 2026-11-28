@@ -147,3 +147,42 @@ export interface DepartureCancellationSummaryDto {
     readonly manualReview: number;
   };
 }
+
+export interface AdminRefundWithBookingDto extends AdminRefundDto {
+  readonly bookingReference: string | null;
+}
+
+export interface AdminRefundListResponse {
+  readonly items: readonly AdminRefundWithBookingDto[];
+  readonly nextCursor: string | null;
+}
+
+export interface PaymentCurrencyExpectedTotals {
+  readonly capturedMinor: bigint;
+  readonly settledRefundsMinor: bigint;
+  readonly openRefundsMinor: bigint;
+  readonly unrefundedRefundRequiredMinor: bigint;
+}
+
+export interface LedgerPaymentExpectationPort {
+  getPaymentLedgerExpectedTotalsByCurrency(
+    asOf: Date,
+  ): Promise<ReadonlyMap<string, PaymentCurrencyExpectedTotals>>;
+}
+
+/**
+ * Informational payment/refund outbox event types intentionally emitted without
+ * an in-process outbox consumer yet (refund execution and cancellation are driven
+ * via pg-boss jobs / webhook handlers).
+ */
+export const PAYMENTS_OUTBOX_EVENTS_WITHOUT_CONSUMERS = [
+  'payment.initiated',
+  'payment.succeeded',
+  'payment.failed',
+  'payment.expired',
+  'payment.amount_mismatch',
+  'refund.requested',
+  'refund.failed',
+  'refund.manual_review',
+  'refund.retry_requested',
+] as const;

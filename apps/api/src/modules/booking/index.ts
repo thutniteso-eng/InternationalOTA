@@ -23,9 +23,17 @@ export {
 } from './booking.reference.js';
 export { BookingService, parseBookingHoldMinutes } from './booking.service.js';
 export {
+  BOOKING_OUTBOX_EVENTS_WITHOUT_CONSUMERS,
   BOOKING_PAYMENT_SUMMARY_PORT,
   CONFIRMED_BOOKING_CANCELLATION_PORT,
+  type AdminBookingAttemptSummary,
+  type AdminBookingDashboardMetrics,
+  type AdminBookingDashboardWindowStats,
+  type AdminBookingDetailDto,
+  type AdminBookingDetailEmailDto,
   type AdminBookingListQuery,
+  type AdminBookingRefundSummary,
+  type BookingAdminPaymentPort,
   type BookingContactInput,
   type BookingDetailDto,
   type BookingEventDto,
@@ -33,7 +41,9 @@ export {
   type BookingNotificationContext,
   type BookingPaymentSummaryDto,
   type BookingPaymentSummaryPort,
+  type BookingReconciliationSnapshot,
   type BookingRefundSummaryDto,
+  type BookingSeatSumsPort,
   type CancelBookingResult,
   type ConfirmedBookingCancellationPort,
   type ConfirmedCancelResponseDto,
@@ -42,5 +52,6 @@ export {
   type CreateHoldResult,
   type CustomerBookingListResponse,
   type HoldBookingResponseDto,
+  type LedgerBookingExpectationPort,
   type MarkPaymentPendingResult,
 } from './booking.types.js';

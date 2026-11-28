@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BOOKING_ADMIN_NOTIFICATION_PORT } from '@internationalota/shared';
 import { BookingModule } from '../booking/index.js';
 import { CatalogModule } from '../catalog/index.js';
 import { IdentityModule } from '../identity/index.js';
@@ -35,6 +36,10 @@ import { EMAIL_TRANSPORT } from './notifications.types.js';
       provide: NOTIFICATION_EMAIL_SENDER_WORKER_PORT,
       useExisting: NotificationsService,
     },
+    {
+      provide: BOOKING_ADMIN_NOTIFICATION_PORT,
+      useExisting: NotificationsService,
+    },
   ],
   exports: [
     EMAIL_TRANSPORT,
@@ -43,6 +48,7 @@ import { EMAIL_TRANSPORT } from './notifications.types.js';
     LogEmailTransport,
     NotificationsService,
     NOTIFICATION_EMAIL_SENDER_WORKER_PORT,
+    BOOKING_ADMIN_NOTIFICATION_PORT,
   ],
 })
 export class NotificationsModule {}

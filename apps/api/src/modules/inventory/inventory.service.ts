@@ -18,8 +18,24 @@ import {
   nightsBetween,
   parseLocalDate,
 } from '@internationalota/time';
-import { Inject, Injectable } from '@nestjs/common';
+import {
+  ADMIN_AUDIT_PORT,
+  BOOKING_SEAT_SUMS_PORT,
+  type ReconciliationFinding,
+} from '@internationalota/shared';
+import {
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  type OnModuleInit,
+  Optional,
+} from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
+import { getRequestId } from '../../common/observability/request-context.js';
+import { requireAdminAuditPort } from '../../common/ports/admin-audit.helper.js';
 import { DRIZZLE_DB } from '../../database/database.module.js';
+import type { BookingSeatSumsPort } from '../booking/index.js';
 import { catalogProductNotFoundException, CatalogService } from '../catalog/index.js';
 import {
   inventoryAllocationAlreadyReleasedException,
@@ -32,6 +48,7 @@ import {
   inventoryUnsupportedProductKindException,
 } from './inventory.errors.js';
 import type {
+  AdminAuditTxRunner,
   AdminDepartureDto,
   AdminDepartureListResponse,
   AllocateInput,
@@ -125,11 +142,44 @@ function toAdminDepartureDto(row: typeof inventoryDepartures.$inferSelect): Admi
 }
 
 @Injectable()
-export class InventoryService {
+export class InventoryService implements OnModuleInit {
+  private readonly logger = new Logger(InventoryService.name);
+  private bookingSeatSumsPort: BookingSeatSumsPort | null = null;
+  private adminAuditPort: AdminAuditTxRunner | null = null;
+
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: DatabaseClient,
     private readonly catalogService: CatalogService,
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {}
+
+  onModuleInit(): void {
+    if (!this.moduleRef) {
+      this.logger.warn(
+        'ModuleRef missing during InventoryService initialization; ADMIN_AUDIT_PORT unavailable.',
+      );
+      return;
+    }
+    try {
+      this.bookingSeatSumsPort = this.moduleRef.get<BookingSeatSumsPort>(BOOKING_SEAT_SUMS_PORT, {
+        strict: false,
+      });
+    } catch {
+      this.bookingSeatSumsPort = null;
+    }
+    try {
+      this.adminAuditPort = this.moduleRef.get<AdminAuditTxRunner>(ADMIN_AUDIT_PORT, {
+        strict: false,
+      });
+    } catch {
+      this.adminAuditPort = null;
+    }
+    if (!this.adminAuditPort) {
+      this.logger.warn(
+        'ADMIN_AUDIT_PORT is not bound in InventoryService; departure_close/reopen will fail closed with 503.',
+      );
+    }
+  }
 
   private async withRunner<T>(
     tx: InventoryDbRunner | undefined,
@@ -565,7 +615,11 @@ export class InventoryService {
     });
   }
 
-  async closeDeparture(departureId: string): Promise<AdminDepartureDto> {
+  async closeDeparture(
+    departureId: string,
+    actorUserId = 'system',
+    reason?: string,
+  ): Promise<AdminDepartureDto> {
     if (!UUID_REGEX.test(departureId)) {
       throw inventoryDepartureNotFoundException();
     }
@@ -587,11 +641,31 @@ export class InventoryService {
         .set({ status: 'closed', updatedAt: sql`now()` })
         .where(eq(inventoryDepartures.id, departureId))
         .returning();
+
+      const auditPort = requireAdminAuditPort(
+        this.adminAuditPort,
+        this.logger,
+        'departure_close',
+        departureId,
+      );
+      await auditPort.recordAudit(tx, {
+        actorUserId,
+        action: 'departure_close',
+        targetType: 'departure',
+        targetId: departureId,
+        reason: reason?.trim() || null,
+        requestId: getRequestId() ?? null,
+      });
+
       return toAdminDepartureDto(updated!);
     });
   }
 
-  async reopenDeparture(departureId: string): Promise<AdminDepartureDto> {
+  async reopenDeparture(
+    departureId: string,
+    actorUserId = 'system',
+    reason?: string,
+  ): Promise<AdminDepartureDto> {
     if (!UUID_REGEX.test(departureId)) {
       throw inventoryDepartureNotFoundException();
     }
@@ -613,16 +687,35 @@ export class InventoryService {
         .set({ status: 'open', updatedAt: sql`now()` })
         .where(eq(inventoryDepartures.id, departureId))
         .returning();
+
+      const auditPort = requireAdminAuditPort(
+        this.adminAuditPort,
+        this.logger,
+        'departure_reopen',
+        departureId,
+      );
+      await auditPort.recordAudit(tx, {
+        actorUserId,
+        action: 'departure_reopen',
+        targetType: 'departure',
+        targetId: departureId,
+        reason: reason?.trim() || null,
+        requestId: getRequestId() ?? null,
+      });
+
       return toAdminDepartureDto(updated!);
     });
   }
 
-  async cancelDeparture(departureId: string): Promise<CancelDepartureResult> {
+  async cancelDeparture(
+    departureId: string,
+    externalTx?: InventoryDbRunner,
+  ): Promise<CancelDepartureResult> {
     if (!UUID_REGEX.test(departureId)) {
       throw inventoryDepartureNotFoundException();
     }
 
-    return this.db.transaction(async (tx) => {
+    return this.withRunner(externalTx, async (tx) => {
       const [existing] = await tx
         .select()
         .from(inventoryDepartures)
@@ -861,5 +954,67 @@ export class InventoryService {
     }
 
     return map;
+  }
+
+  /**
+   * Read-only reconciliation check:
+   * 1. `inventory.verify_allocated()` must return zero rows.
+   * 2. Every departure's `allocated` must equal active booking seats sum from Booking module.
+   *
+   * Note: intentionally evaluates current live state (not point-in-time `asOf`),
+   * which is appropriate for daily off-peak reconciliation runs.
+   */
+  async runReconciliationChecks(asOf: Date): Promise<readonly ReconciliationFinding[]> {
+    void asOf;
+    if (!this.bookingSeatSumsPort) {
+      throw new InternalServerErrorException(
+        'BOOKING_SEAT_SUMS_PORT is not available for inventory reconciliation.',
+      );
+    }
+
+    const findings: ReconciliationFinding[] = [];
+    const verifyRes = await this.db.execute(sql`
+      SELECT departure_id::text AS "departureId", recorded_allocated AS "recordedAllocated", actual_active_allocated::int AS "actualActiveAllocated"
+      FROM inventory.verify_allocated()
+    `);
+    for (const row of verifyRes.rows) {
+      findings.push({
+        code: 'INVENTORY_VERIFY_ALLOCATED_MISMATCH',
+        severity: 'error',
+        entityType: 'departure',
+        entityId: String(row['departureId']),
+        details: {
+          recordedAllocated: Number(row['recordedAllocated']),
+          actualActiveAllocated: Number(row['actualActiveAllocated']),
+        },
+      });
+    }
+
+    const departures = await this.db
+      .select({ id: inventoryDepartures.id, allocated: inventoryDepartures.allocated })
+      .from(inventoryDepartures);
+
+    const bookingSeatSums = await this.bookingSeatSumsPort.getActiveSeatSumsByDeparture();
+    const depMap = new Map(departures.map((d) => [d.id, d.allocated]));
+    const allDepIds = new Set([...depMap.keys(), ...bookingSeatSums.keys()]);
+
+    for (const depId of allDepIds) {
+      const inventoryAllocated = depMap.get(depId) ?? 0;
+      const bookingSeatsSum = bookingSeatSums.get(depId) ?? 0;
+      if (inventoryAllocated !== bookingSeatsSum) {
+        findings.push({
+          code: 'INVENTORY_BOOKING_SEAT_SUM_MISMATCH',
+          severity: 'error',
+          entityType: 'departure',
+          entityId: depId,
+          details: {
+            inventoryAllocated,
+            bookingSeatsSum,
+          },
+        });
+      }
+    }
+
+    return findings;
   }
 }

@@ -4,20 +4,27 @@ import {
   type DatabaseTransaction,
   desc,
   eq,
+  getTableColumns,
   inArray,
   lte,
   type OutboxEvent,
   paymentsPaymentAttempts,
   paymentsRefunds,
+  REFUND_STATUSES,
   type RefundReason,
   type RefundRow,
   sql,
 } from '@internationalota/db';
 import { type CurrencyCode, createMoney } from '@internationalota/money';
+import { ADMIN_AUDIT_PORT, type AdminAuditRecordInput } from '@internationalota/shared';
 import { parseLocalDate } from '@internationalota/time';
 import { Inject, Injectable, Logger, type OnModuleInit, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
+import { getRequestId } from '../../common/observability/request-context.js';
+import { requireAdminAuditPort } from '../../common/ports/admin-audit.helper.js';
 import { DRIZZLE_DB } from '../../database/database.module.js';
 import {
+  bookingInvalidQueryException,
   bookingNotCancellableException,
   bookingNotFoundException,
   type BookingRefundSummaryDto,
@@ -45,6 +52,7 @@ import {
 } from './payments.errors.js';
 import type {
   AdminRefundDto,
+  AdminRefundListResponse,
   BookingCancellationPreviewDto,
   DepartureCancellationSummaryDto,
   DepartureCancelResultDto,
@@ -93,6 +101,10 @@ function toAdminRefundDto(row: RefundRow): AdminRefundDto {
   };
 }
 
+interface AdminAuditPortLike {
+  recordAudit(tx: DatabaseTransaction, input: AdminAuditRecordInput): Promise<void>;
+}
+
 interface PendingDepartureCancelPayload {
   readonly bookingId: string;
   readonly departureId: string;
@@ -110,6 +122,7 @@ export class RefundService
 {
   private readonly logger = new Logger(RefundService.name);
   private readonly queuedFallbackDepartureJobs: PendingDepartureCancelPayload[] = [];
+  private adminAuditPort: AdminAuditPortLike | null = null;
 
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: DatabaseClient,
@@ -119,9 +132,24 @@ export class RefundService
     private readonly outboxService: OutboxService,
     private readonly registry: PaymentProviderRegistry,
     @Optional() private readonly jobQueueService?: JobQueueService,
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {}
 
   onModuleInit(): void {
+    if (this.moduleRef) {
+      try {
+        this.adminAuditPort = this.moduleRef.get<AdminAuditPortLike>(ADMIN_AUDIT_PORT, {
+          strict: false,
+        });
+      } catch {
+        this.adminAuditPort = null;
+      }
+    }
+    if (!this.adminAuditPort) {
+      this.logger.warn(
+        'ADMIN_AUDIT_PORT is not bound in RefundService; admin refund_retry and departure_cancel will fail closed with 503.',
+      );
+    }
     this.outboxService.registerHandler('payment.refund_required', async (event) => {
       await this.handlePaymentRefundRequiredEvent(event);
     });
@@ -424,8 +452,6 @@ export class RefundService
       throw departureCancelReasonRequiredException();
     }
 
-    await this.inventoryService.cancelDeparture(departureId);
-
     const bookings = await this.bookingService.listBookingsForDeparture(departureId);
     const activeHolds = bookings.filter(
       (b) => b.status === 'held' || b.status === 'payment_pending',
@@ -433,21 +459,36 @@ export class RefundService
     const confirmedBookings = bookings.filter((b) => b.status === 'confirmed');
 
     let activeHoldsCancelledCount = 0;
-    if (activeHolds.length > 0) {
-      await this.db.transaction(async (tx) => {
-        for (const hold of activeHolds) {
-          const cancelled = await this.bookingService.cancelActiveHoldOnDeparture(
-            hold.id,
-            `admin:${adminUserId}`,
-            `departure_cancelled:${reason}`,
-            tx,
-          );
-          if (cancelled) {
-            activeHoldsCancelledCount += 1;
-          }
+    await this.db.transaction(async (tx) => {
+      await this.inventoryService.cancelDeparture(departureId, tx);
+
+      for (const hold of activeHolds) {
+        const cancelled = await this.bookingService.cancelActiveHoldOnDeparture(
+          hold.id,
+          `admin:${adminUserId}`,
+          `departure_cancelled:${reason}`,
+          tx,
+        );
+        if (cancelled) {
+          activeHoldsCancelledCount += 1;
         }
+      }
+
+      const auditPort = requireAdminAuditPort(
+        this.adminAuditPort,
+        this.logger,
+        'departure_cancel',
+        departureId,
+      );
+      await auditPort.recordAudit(tx, {
+        actorUserId: adminUserId,
+        action: 'departure_cancel',
+        targetType: 'departure',
+        targetId: departureId,
+        reason,
+        requestId: getRequestId() ?? null,
       });
-    }
+    });
 
     for (const conf of confirmedBookings) {
       const payload: PendingDepartureCancelPayload = {
@@ -1093,10 +1134,16 @@ export class RefundService
   /**
    * Admin manual retry (`POST /admin/refunds/:id/retry`): `manual_review -> requested`.
    */
-  async adminRetryRefund(refundId: string, adminUserId: string): Promise<AdminRefundDto> {
+  async adminRetryRefund(
+    refundId: string,
+    adminUserId: string,
+    reason?: string,
+  ): Promise<AdminRefundDto> {
     if (!UUID_REGEX.test(refundId)) {
       throw paymentRefundNotFoundException();
     }
+
+    const trimmedReason = reason?.trim() || null;
 
     const retried = await this.db.transaction(async (tx) => {
       const [locked] = await tx
@@ -1129,6 +1176,21 @@ export class RefundService
         throw paymentRefundNotRetryableException();
       }
 
+      const auditPort = requireAdminAuditPort(
+        this.adminAuditPort,
+        this.logger,
+        'refund_retry',
+        updated.id,
+      );
+      await auditPort.recordAudit(tx, {
+        actorUserId: adminUserId,
+        action: 'refund_retry',
+        targetType: 'refund',
+        targetId: updated.id,
+        reason: trimmedReason,
+        requestId: getRequestId() ?? null,
+      });
+
       await this.outboxService.enqueue(tx, {
         aggregateType: 'refund',
         aggregateId: updated.id,
@@ -1136,6 +1198,7 @@ export class RefundService
         payload: {
           refundId: updated.id,
           adminUserId,
+          ...(trimmedReason ? { reason: trimmedReason } : {}),
         },
       });
 
@@ -1144,6 +1207,94 @@ export class RefundService
 
     this.jobQueueService?.triggerRefundExecutorAsync();
     return toAdminRefundDto(retried);
+  }
+
+  async listAdminRefunds(
+    query: {
+      readonly status?: string;
+      readonly cursor?: string;
+      readonly limit?: string;
+    } = {},
+  ): Promise<AdminRefundListResponse> {
+    let limit = 20;
+    if (query.limit !== undefined && query.limit !== '') {
+      const parsed = Number(query.limit);
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 100) {
+        throw bookingInvalidQueryException('limit must be between 1 and 100');
+      }
+      limit = parsed;
+    }
+
+    const conditions = [];
+    if (query.status !== undefined && query.status.trim() !== '' && query.status.trim() !== 'all') {
+      const statuses = query.status
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      for (const st of statuses) {
+        if (!(REFUND_STATUSES as readonly string[]).includes(st)) {
+          throw bookingInvalidQueryException(`invalid refund status "${st}"`);
+        }
+      }
+      if (statuses.length > 0) {
+        conditions.push(inArray(paymentsRefunds.status, statuses));
+      }
+    }
+
+    if (query.cursor) {
+      let decoded: { createdAt: string; id: string };
+      try {
+        const raw = JSON.parse(Buffer.from(query.cursor, 'base64url').toString('utf8')) as Record<
+          string,
+          unknown
+        >;
+        if (
+          typeof raw['createdAt'] !== 'string' ||
+          typeof raw['id'] !== 'string' ||
+          !UUID_REGEX.test(raw['id'])
+        ) {
+          throw new Error('invalid');
+        }
+        decoded = { createdAt: raw['createdAt'], id: raw['id'] };
+      } catch {
+        throw bookingInvalidQueryException('invalid cursor');
+      }
+      conditions.push(
+        sql`(${paymentsRefunds.createdAt}, ${paymentsRefunds.id}) < (${decoded.createdAt}::timestamptz, ${decoded.id}::uuid)`,
+      );
+    }
+
+    const rows = await this.db
+      .select({
+        ...getTableColumns(paymentsRefunds),
+        createdAtCursor: sql<string>`to_char(${paymentsRefunds.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+      })
+      .from(paymentsRefunds)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(paymentsRefunds.createdAt), desc(paymentsRefunds.id))
+      .limit(limit + 1);
+
+    const hasMore = rows.length > limit;
+    const pageRows = hasMore ? rows.slice(0, limit) : rows;
+    const refMap = await this.bookingService.getBookingReferenceMap(
+      pageRows.map((r) => r.bookingId),
+    );
+    const lastRow = pageRows[pageRows.length - 1];
+    const nextCursor =
+      hasMore && lastRow
+        ? Buffer.from(
+            JSON.stringify({ createdAt: lastRow.createdAtCursor, id: lastRow.id }),
+            'utf8',
+          ).toString('base64url')
+        : null;
+
+    return {
+      items: pageRows.map((row) => ({
+        ...toAdminRefundDto(row),
+        bookingReference: refMap.get(row.bookingId) ?? null,
+      })),
+      nextCursor,
+    };
   }
 
   async getRefundSummaryForBooking(bookingId: string): Promise<BookingRefundSummaryDto | null> {

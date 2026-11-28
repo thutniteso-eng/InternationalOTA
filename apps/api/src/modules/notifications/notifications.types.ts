@@ -42,3 +42,18 @@ export interface EmailDeliverySummary {
 }
 
 export type SupportedNotificationTemplate = EmailTemplate;
+
+export interface AdminBookingEmailSummary {
+  readonly id: string;
+  readonly template: SupportedNotificationTemplate;
+  readonly locale: string;
+  readonly status: string;
+  readonly attempts: number;
+  readonly lastError: string | null;
+  readonly sentAt: string | null;
+  readonly createdAt: string;
+}
+
+export interface BookingAdminNotificationPort {
+  getEmailsForBooking(bookingId: string): Promise<readonly AdminBookingEmailSummary[]>;
+}

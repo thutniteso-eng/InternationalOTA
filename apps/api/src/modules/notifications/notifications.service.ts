@@ -4,6 +4,7 @@ import {
   asc,
   type DatabaseClient,
   type DatabaseTransaction,
+  desc,
   type EmailTemplate,
   eq,
   inArray,
@@ -13,6 +14,7 @@ import {
   sql,
 } from '@internationalota/db';
 import type { CurrencyCode } from '@internationalota/money';
+import type { ReconciliationFinding } from '@internationalota/shared';
 import { resolveAppEnv } from '@internationalota/shared';
 import { Inject, Injectable, Logger, type OnModuleInit, Optional } from '@nestjs/common';
 import { DRIZZLE_DB } from '../../database/database.module.js';
@@ -29,9 +31,12 @@ import { EmailTemplateRenderer, resolveEmailLocale } from './email-renderer.serv
 import { hashRecipientEmail, redactEmailAddresses } from './email-transport.js';
 import { NotificationsEmailSender } from './notifications-email-sender.service.js';
 import {
+  type AdminBookingEmailSummary,
+  type BookingAdminNotificationPort,
   EMAIL_TRANSPORT,
   type EmailDeliverySummary,
   type EmailTransport,
+  type SupportedNotificationTemplate,
 } from './notifications.types.js';
 
 const MAX_EMAIL_ATTEMPTS = 5;
@@ -51,7 +56,9 @@ interface ClaimedEmailMessage {
 }
 
 @Injectable()
-export class NotificationsService implements OnModuleInit, NotificationEmailSenderWorkerPort {
+export class NotificationsService
+  implements OnModuleInit, NotificationEmailSenderWorkerPort, BookingAdminNotificationPort
+{
   private readonly logger = new Logger(NotificationsService.name);
   private readonly bookingIdByEmailId = new Map<string, string>();
   private readonly refundPayloadByEmailId = new Map<
@@ -494,5 +501,74 @@ export class NotificationsService implements OnModuleInit, NotificationEmailSend
 
       return isDead;
     });
+  }
+
+  /**
+   * Read-only non-PII email status summary for admin booking detail view.
+   * Never exposes email addresses or recipient hashes.
+   */
+  async getEmailsForBooking(bookingId: string): Promise<readonly AdminBookingEmailSummary[]> {
+    const eventIds = await this.outboxService.findEventIdsForBooking(bookingId);
+    if (eventIds.length === 0) {
+      return [];
+    }
+
+    const rows = await this.db
+      .select({
+        id: notificationsEmailMessages.id,
+        template: notificationsEmailMessages.template,
+        locale: notificationsEmailMessages.locale,
+        status: notificationsEmailMessages.status,
+        attempts: notificationsEmailMessages.attempts,
+        lastError: notificationsEmailMessages.lastError,
+        sentAt: notificationsEmailMessages.sentAt,
+        createdAt: notificationsEmailMessages.createdAt,
+      })
+      .from(notificationsEmailMessages)
+      .where(inArray(notificationsEmailMessages.eventId, [...eventIds]))
+      .orderBy(desc(notificationsEmailMessages.createdAt), desc(notificationsEmailMessages.id));
+
+    return rows.map((row) => ({
+      id: row.id,
+      template: row.template as SupportedNotificationTemplate,
+      locale: row.locale,
+      status: row.status,
+      attempts: row.attempts,
+      lastError: row.lastError,
+      sentAt: row.sentAt ? row.sentAt.toISOString() : null,
+      createdAt: row.createdAt.toISOString(),
+    }));
+  }
+
+  /**
+   * Read-only reconciliation check: flags email_messages in status `dead`.
+   */
+  async runReconciliationChecks(asOf: Date): Promise<readonly ReconciliationFinding[]> {
+    const deadRows = await this.db
+      .select({
+        id: notificationsEmailMessages.id,
+        template: notificationsEmailMessages.template,
+        locale: notificationsEmailMessages.locale,
+        attempts: notificationsEmailMessages.attempts,
+      })
+      .from(notificationsEmailMessages)
+      .where(
+        and(
+          eq(notificationsEmailMessages.status, 'dead'),
+          lte(notificationsEmailMessages.createdAt, asOf),
+        ),
+      );
+
+    return deadRows.map((row) => ({
+      code: 'EMAIL_DEAD',
+      severity: 'warning' as const,
+      entityType: 'email_message',
+      entityId: row.id,
+      details: {
+        template: row.template,
+        locale: row.locale,
+        attempts: row.attempts,
+      },
+    }));
   }
 }

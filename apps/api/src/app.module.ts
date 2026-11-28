@@ -12,6 +12,7 @@ import { IdentityModule } from './modules/identity/index.js';
 import { InventoryModule } from './modules/inventory/index.js';
 import { MessagingModule } from './modules/messaging/index.js';
 import { NotificationsModule } from './modules/notifications/index.js';
+import { OpsModule } from './modules/ops/index.js';
 import { PaymentsModule } from './modules/payments/index.js';
 import { PricingModule } from './modules/pricing/index.js';
 import { SupplyModule } from './modules/supply/index.js';
@@ -32,6 +33,7 @@ import { SupplyModule } from './modules/supply/index.js';
     BookingModule,
     PaymentsModule,
     NotificationsModule,
+    OpsModule,
   ],
   controllers: [HealthController],
   providers: [

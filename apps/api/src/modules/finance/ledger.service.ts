@@ -13,9 +13,23 @@ import {
   sql,
 } from '@internationalota/db';
 import { createMoney, type CurrencyCode, type Money } from '@internationalota/money';
+import {
+  LEDGER_BOOKING_EXPECTATION_PORT,
+  LEDGER_PAYMENT_EXPECTATION_PORT,
+  type ReconciliationFinding,
+} from '@internationalota/shared';
 import { type LocalDate, parseLocalDate } from '@internationalota/time';
-import { Inject, Injectable } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+  type OnModuleInit,
+  Optional,
+} from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { DRIZZLE_DB } from '../../database/database.module.js';
+import type { LedgerBookingExpectationPort } from '../booking/index.js';
+import type { LedgerPaymentExpectationPort } from '../payments/index.js';
 import {
   LedgerAccountInactiveError,
   LedgerAccountNotFoundError,
@@ -81,8 +95,36 @@ function isPgUniqueViolation(err: unknown, constraintName: string): boolean {
  *   effectively re-establishing the original economic impact while preserving full auditability.
  */
 @Injectable()
-export class LedgerService {
-  constructor(@Inject(DRIZZLE_DB) private readonly db: DatabaseClient) {}
+export class LedgerService implements OnModuleInit {
+  private bookingExpectationPort: LedgerBookingExpectationPort | null = null;
+  private paymentExpectationPort: LedgerPaymentExpectationPort | null = null;
+
+  constructor(
+    @Inject(DRIZZLE_DB) private readonly db: DatabaseClient,
+    @Optional() private readonly moduleRef?: ModuleRef,
+  ) {}
+
+  onModuleInit(): void {
+    if (!this.moduleRef) {
+      return;
+    }
+    try {
+      this.bookingExpectationPort = this.moduleRef.get<LedgerBookingExpectationPort>(
+        LEDGER_BOOKING_EXPECTATION_PORT,
+        { strict: false },
+      );
+    } catch {
+      this.bookingExpectationPort = null;
+    }
+    try {
+      this.paymentExpectationPort = this.moduleRef.get<LedgerPaymentExpectationPort>(
+        LEDGER_PAYMENT_EXPECTATION_PORT,
+        { strict: false },
+      );
+    } catch {
+      this.paymentExpectationPort = null;
+    }
+  }
 
   /**
    * Posts a balanced journal entry inside the caller's Drizzle transaction.
@@ -422,5 +464,155 @@ export class LedgerService {
       .where(eq(financeAccounts.code, code))
       .limit(1);
     return account ?? null;
+  }
+
+  /**
+   * Read-only reconciliation check (Check 4):
+   * - All journal entries balance per currency as of `asOf`.
+   * - Per-currency identities:
+   *   - `psp_clearing` = Σ captured payments (succeeded + refund_required) - Σ succeeded refunds
+   *   - `customer_prepayments` = Σ currently confirmed bookings (excluding cancelled)
+   *   - `refunds_payable` = Σ open refunds + Σ unrefunded refund_required attempts
+   */
+  async runReconciliationChecks(asOf: Date): Promise<readonly ReconciliationFinding[]> {
+    if (!this.bookingExpectationPort || !this.paymentExpectationPort) {
+      throw new InternalServerErrorException(
+        'Ledger reconciliation ports are not available in this application context.',
+      );
+    }
+
+    const findings: ReconciliationFinding[] = [];
+
+    const unbalancedRes = await this.db.execute(sql`
+      SELECT
+        jl.entry_id::text AS "entryId",
+        TRIM(jl.currency) AS currency,
+        (SUM(jl.debit_minor) - SUM(jl.credit_minor))::text AS "diffMinor"
+      FROM finance.journal_lines jl
+      INNER JOIN finance.journal_entries je ON je.id = jl.entry_id
+      WHERE je.posted_at <= ${asOf}
+      GROUP BY jl.entry_id, TRIM(jl.currency)
+      HAVING SUM(jl.debit_minor) <> SUM(jl.credit_minor)
+    `);
+    for (const row of unbalancedRes.rows) {
+      findings.push({
+        code: 'LEDGER_UNBALANCED_ENTRY',
+        severity: 'error',
+        entityType: 'journal_entry',
+        entityId: String(row['entryId']),
+        details: {
+          currency: String(row['currency']),
+          diffMinor: String(row['diffMinor']),
+        },
+      });
+    }
+
+    const ledgerBalRes = await this.db.execute(sql`
+      SELECT
+        a.code,
+        TRIM(a.currency) AS currency,
+        a.type,
+        COALESCE(SUM(CASE WHEN je.id IS NOT NULL THEN jl.debit_minor ELSE 0 END), 0)::text AS "totalDebit",
+        COALESCE(SUM(CASE WHEN je.id IS NOT NULL THEN jl.credit_minor ELSE 0 END), 0)::text AS "totalCredit"
+      FROM finance.accounts a
+      LEFT JOIN finance.journal_lines jl ON jl.account_id = a.id
+      LEFT JOIN finance.journal_entries je ON je.id = jl.entry_id AND je.posted_at <= ${asOf}
+      WHERE (a.code LIKE 'asset:psp_clearing:%'
+          OR a.code LIKE 'liability:customer_prepayments:%'
+          OR a.code LIKE 'liability:refunds_payable:%')
+      GROUP BY a.id, a.code, TRIM(a.currency), a.type
+    `);
+
+    const pspClearingActual = new Map<string, bigint>();
+    const prepaymentsActual = new Map<string, bigint>();
+    const refundsPayableActual = new Map<string, bigint>();
+    const allCurrencies = new Set<string>();
+
+    for (const row of ledgerBalRes.rows) {
+      const code = String(row['code']);
+      const currency = String(row['currency']);
+      allCurrencies.add(currency);
+      const hasEntry = row['totalDebit'] !== null || row['totalCredit'] !== null;
+      const debit = hasEntry ? BigInt(String(row['totalDebit'])) : 0n;
+      const credit = hasEntry ? BigInt(String(row['totalCredit'])) : 0n;
+
+      if (code.startsWith('asset:psp_clearing:')) {
+        pspClearingActual.set(currency, (pspClearingActual.get(currency) ?? 0n) + (debit - credit));
+      } else if (code.startsWith('liability:customer_prepayments:')) {
+        prepaymentsActual.set(currency, (prepaymentsActual.get(currency) ?? 0n) + (credit - debit));
+      } else if (code.startsWith('liability:refunds_payable:')) {
+        refundsPayableActual.set(
+          currency,
+          (refundsPayableActual.get(currency) ?? 0n) + (credit - debit),
+        );
+      }
+    }
+
+    const confirmedByCurrency =
+      await this.bookingExpectationPort.getConfirmedTotalsByCurrency(asOf);
+    const paymentExpectedByCurrency =
+      await this.paymentExpectationPort.getPaymentLedgerExpectedTotalsByCurrency(asOf);
+
+    for (const c of confirmedByCurrency.keys()) allCurrencies.add(c);
+    for (const c of paymentExpectedByCurrency.keys()) allCurrencies.add(c);
+
+    for (const currency of allCurrencies) {
+      const paymentExp = paymentExpectedByCurrency.get(currency) ?? {
+        capturedMinor: 0n,
+        settledRefundsMinor: 0n,
+        openRefundsMinor: 0n,
+        unrefundedRefundRequiredMinor: 0n,
+      };
+      const expectedClearing = paymentExp.capturedMinor - paymentExp.settledRefundsMinor;
+      const actualClearing = pspClearingActual.get(currency) ?? 0n;
+      if (actualClearing !== expectedClearing) {
+        findings.push({
+          code: 'LEDGER_PSP_CLEARING_MISMATCH',
+          severity: 'error',
+          entityType: 'ledger_account',
+          entityId: `asset:psp_clearing:${currency}`,
+          details: {
+            currency,
+            actualMinor: actualClearing.toString(),
+            expectedMinor: expectedClearing.toString(),
+          },
+        });
+      }
+
+      const expectedPrepayments = confirmedByCurrency.get(currency) ?? 0n;
+      const actualPrepayments = prepaymentsActual.get(currency) ?? 0n;
+      if (actualPrepayments !== expectedPrepayments) {
+        findings.push({
+          code: 'LEDGER_CUSTOMER_PREPAYMENTS_MISMATCH',
+          severity: 'error',
+          entityType: 'ledger_account',
+          entityId: `liability:customer_prepayments:${currency}`,
+          details: {
+            currency,
+            actualMinor: actualPrepayments.toString(),
+            expectedMinor: expectedPrepayments.toString(),
+          },
+        });
+      }
+
+      const expectedRefundsPayable =
+        paymentExp.openRefundsMinor + paymentExp.unrefundedRefundRequiredMinor;
+      const actualRefundsPayable = refundsPayableActual.get(currency) ?? 0n;
+      if (actualRefundsPayable !== expectedRefundsPayable) {
+        findings.push({
+          code: 'LEDGER_REFUNDS_PAYABLE_MISMATCH',
+          severity: 'error',
+          entityType: 'ledger_account',
+          entityId: `liability:refunds_payable:${currency}`,
+          details: {
+            currency,
+            actualMinor: actualRefundsPayable.toString(),
+            expectedMinor: expectedRefundsPayable.toString(),
+          },
+        });
+      }
+    }
+
+    return findings;
   }
 }

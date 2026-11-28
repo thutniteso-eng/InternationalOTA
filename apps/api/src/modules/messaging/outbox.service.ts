@@ -4,18 +4,24 @@ import {
   type DatabaseClient,
   type DatabaseTransaction,
   eq,
+  gt,
+  inArray,
+  isNotNull,
   isNull,
   lte,
+  or,
   type OutboxEvent,
   outboxEvents,
   sql,
 } from '@internationalota/db';
+import type { ReconciliationFinding } from '@internationalota/shared';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { getRequestId, runWithRequestContext } from '../../common/observability/request-context.js';
 import { DRIZZLE_DB } from '../../database/database.module.js';
 import {
   calculateExponentialBackoffMs,
   type EnqueueOutboxEventInput,
+  OUTBOX_EVENTS_WITHOUT_CONSUMERS,
   type OutboxEventHandler,
   type OutboxRelayOptions,
 } from './messaging.types.js';
@@ -92,6 +98,16 @@ export class OutboxService {
     this.handlers.clear();
   }
 
+  /**
+   * Registers domain outbox event types intentionally emitted without a
+   * downstream consumer yet so relay marks them `outcome = 'no_consumer'`.
+   */
+  registerEventsWithoutConsumers(eventTypes: readonly string[]): void {
+    for (const eventType of eventTypes) {
+      OUTBOX_EVENTS_WITHOUT_CONSUMERS.add(eventType);
+    }
+  }
+
   getMaxAttempts(): number {
     const raw = process.env['OUTBOX_MAX_ATTEMPTS'];
     const parsed = raw ? Number.parseInt(raw, 10) : NaN;
@@ -154,6 +170,7 @@ export class OutboxService {
 
       for (const event of claimed) {
         const registeredHandlers = this.handlers.get(event.eventType);
+        const hasHandlers = Boolean(registeredHandlers && registeredHandlers.length > 0);
         const attempt = event.attempts + 1;
         const payloadObj =
           typeof event.payload === 'object' && event.payload !== null
@@ -166,11 +183,32 @@ export class OutboxService {
         const eventRequestId =
           typeof metaObj?.['requestId'] === 'string' ? metaObj['requestId'] : undefined;
 
+        if (!hasHandlers && OUTBOX_EVENTS_WITHOUT_CONSUMERS.has(event.eventType)) {
+          await tx
+            .update(outboxEvents)
+            .set({
+              publishedAt: sql`now()`,
+              outcome: 'no_consumer',
+              lastError: null,
+            })
+            .where(eq(outboxEvents.id, event.id));
+
+          this.logger.log(
+            JSON.stringify({
+              event: 'outbox_event_no_consumer',
+              eventId: event.id,
+              eventType: event.eventType,
+              ...(eventRequestId ? { requestId: eventRequestId } : {}),
+            }),
+          );
+          continue;
+        }
+
         let handlerError: unknown = null;
         let handlerSucceeded = false;
 
         const executeHandler = async (): Promise<void> => {
-          if (!registeredHandlers || registeredHandlers.length === 0) {
+          if (!hasHandlers || !registeredHandlers) {
             throw new Error(`No handler registered for outbox event type "${event.eventType}"`);
           }
           for (const handler of registeredHandlers) {
@@ -199,6 +237,7 @@ export class OutboxService {
             .update(outboxEvents)
             .set({
               publishedAt: sql`now()`,
+              outcome: 'delivered',
               lastError: null,
             })
             .where(eq(outboxEvents.id, event.id));
@@ -276,5 +315,59 @@ export class OutboxService {
     } finally {
       this.inFlight.delete(runPromise);
     }
+  }
+
+  /**
+   * Read-only lookup of outbox event IDs associated with a booking (no payload returned).
+   */
+  async findEventIdsForBooking(bookingId: string): Promise<readonly string[]> {
+    const rows = await this.db
+      .select({ id: outboxEvents.id })
+      .from(outboxEvents)
+      .where(
+        and(
+          inArray(outboxEvents.aggregateType, ['booking', 'refund', 'payment_attempt']),
+          or(
+            eq(outboxEvents.aggregateId, bookingId),
+            sql`${outboxEvents.payload}->>'bookingId' = ${bookingId}`,
+          ),
+        ),
+      );
+    return rows.map((r) => r.id);
+  }
+
+  /**
+   * Read-only reconciliation check: flags dead-lettered or high-retry (>5) outbox events.
+   */
+  async runReconciliationChecks(asOf: Date): Promise<readonly ReconciliationFinding[]> {
+    const rows = await this.db
+      .select({
+        id: outboxEvents.id,
+        eventType: outboxEvents.eventType,
+        attempts: outboxEvents.attempts,
+        deadLetteredAt: outboxEvents.deadLetteredAt,
+      })
+      .from(outboxEvents)
+      .where(
+        and(
+          lte(outboxEvents.occurredAt, asOf),
+          or(
+            isNotNull(outboxEvents.deadLetteredAt),
+            and(isNull(outboxEvents.publishedAt), gt(outboxEvents.attempts, 5)),
+          ),
+        ),
+      );
+
+    return rows.map((row) => ({
+      code: 'OUTBOX_STUCK_OR_DEAD_LETTER',
+      severity: 'warning' as const,
+      entityType: 'outbox_event',
+      entityId: row.id,
+      details: {
+        eventType: row.eventType,
+        attempts: row.attempts,
+        deadLettered: row.deadLetteredAt !== null,
+      },
+    }));
   }
 }

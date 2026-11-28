@@ -1030,3 +1030,177 @@ input:focus-visible {
   justify-content: center;
   margin-top: 1rem;
 }
+
+.adminNavBar {
+  background-color: var(--surface-subtle);
+  border-bottom: 1px solid var(--border);
+}
+
+.adminNavInner {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  justify-content: space-between;
+  margin: 0 auto;
+  max-width: 1120px;
+  padding: 0.5rem 1rem;
+}
+
+.adminNavBrand {
+  color: var(--ink);
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.adminNavLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.adminNavLink {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--ink);
+  display: inline-flex;
+  font-size: 0.875rem;
+  font-weight: 600;
+  min-height: 40px;
+  padding: 0 0.75rem;
+  text-decoration: none;
+  background-color: var(--surface);
+}
+
+.adminNavLinkActive {
+  background-color: var(--brand);
+  border-color: var(--brand);
+  color: #ffffff;
+}
+
+.adminStack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.adminGrid2 {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 720px) {
+  .adminGrid2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.adminStatCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.adminBigStat {
+  font-size: 1.125rem;
+  margin: 0;
+}
+
+.adminStatusCounts {
+  display: grid;
+  gap: 0.375rem;
+  margin: 0;
+}
+
+.adminMetricRow {
+  align-items: center;
+  border-bottom: 1px dashed var(--border);
+  display: flex;
+  justify-content: space-between;
+  padding: 0.25rem 0;
+}
+
+.adminMetricRow dt {
+  color: var(--ink-muted);
+}
+
+.adminMetricRow dd {
+  font-weight: 700;
+  margin: 0;
+}
+
+.adminSubHeading {
+  font-size: 0.9375rem;
+  margin: 0.25rem 0;
+}
+
+.adminRevenueList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.adminFilterForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.adminFilterGrid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 720px) {
+  .adminFilterGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.adminFieldLabel {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.875rem;
+  font-weight: 600;
+  gap: 0.25rem;
+}
+
+.adminInput {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--ink);
+  font: inherit;
+  min-height: 44px;
+  padding: 0.5rem 0.625rem;
+  width: 100%;
+}
+
+.adminList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.adminListItem {
+  border-top: 1px solid var(--border);
+  padding-top: 0.5rem;
+  word-break: break-word;
+}
+
+.adminCodeJson {
+  background-color: var(--surface-subtle);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  margin: 0.375rem 0 0;
+  overflow-x: auto;
+  padding: 0.5rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

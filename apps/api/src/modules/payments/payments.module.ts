@@ -1,5 +1,9 @@
 import { Module } from '@nestjs/common';
 import {
+  BOOKING_ADMIN_PAYMENT_PORT,
+  LEDGER_PAYMENT_EXPECTATION_PORT,
+} from '@internationalota/shared';
+import {
   BOOKING_PAYMENT_SUMMARY_PORT,
   BookingModule,
   CONFIRMED_BOOKING_CANCELLATION_PORT,
@@ -54,6 +58,14 @@ import { RefundService } from './refund.service.js';
       provide: DEPARTURE_BOOKING_CANCEL_WORKER_PORT,
       useExisting: RefundService,
     },
+    {
+      provide: LEDGER_PAYMENT_EXPECTATION_PORT,
+      useExisting: PaymentsService,
+    },
+    {
+      provide: BOOKING_ADMIN_PAYMENT_PORT,
+      useExisting: PaymentsService,
+    },
   ],
   exports: [
     PaymentsService,
@@ -66,6 +78,8 @@ import { RefundService } from './refund.service.js';
     MOCK_PSP_DELAYED_CALLBACK_WORKER_PORT,
     REFUND_EXECUTOR_WORKER_PORT,
     DEPARTURE_BOOKING_CANCEL_WORKER_PORT,
+    LEDGER_PAYMENT_EXPECTATION_PORT,
+    BOOKING_ADMIN_PAYMENT_PORT,
   ],
 })
 export class PaymentsModule {}
