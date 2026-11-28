@@ -42,7 +42,8 @@ D-018: verified email required before payment. D-020: external integrations via 
 | P2-08 Email notifications (SMTP + Mailpit, D-023) | MERGED #43 (N4 at-least-once on crash window) |
 | P2-09 Booking web — Demo 2 (+U2–U4) | MERGED #45 — Demo 2 live on staging |
 | H-1 Hygiene: F1, N3, U5, U6 (+R1 cursor precision) | MERGED #47 |
-| P2-10 Daily reconciliation + minimal admin | READY — spec in implementation/tasks (Owner relays to Antigravity) |
+| P2-10 Daily reconciliation + minimal admin | MERGED #51 (after R1 audit fail-closed, R2 audit tests, R3 outbox no_consumer) |
+| P2-11 Failure-scenario suite + supplier reject | READY — spec in implementation/tasks |
 
 
 ## Pause (2026-11-28 00:10 ICT)
