@@ -89,4 +89,7 @@
   - `pnpm test` (`apps/api`, `apps/web`, packages): 100% pass.
   - `APP_ENV=test FAULT_INJECTION=1 pnpm test:failure-scenarios`: **8/8 file, 9/9 test pass trong `32.04s`**.
   - `pnpm-lock.yaml`: không thay đổi (`0` dependency mới).
-- **GitHub Actions CI**: _(Sẽ cập nhật ngay sau khi push PR và hoàn tất CI run)_
+- **GitHub Actions CI**:
+  - Run `46133586479` (PR #53, commit `bd7c115`): [https://github.com/thutniteso-eng/InternationalOTA/actions/runs/46133586479](https://github.com/thutniteso-eng/InternationalOTA/actions/runs/46133586479) — `success`.
+  - Job `verify`: **3m 22s** (`Failure scenarios`: **29s** — `2026-11-28T10:09:08Z` → `2026-11-28T10:09:37Z`, dưới ngưỡng 6 phút).
+  - Job `security`: **12s**.
