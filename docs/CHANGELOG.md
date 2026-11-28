@@ -39,3 +39,4 @@
 - 2026-11-28: H-1 merged (PR #47) after R1 (booking cursor microsecond precision). Desktop control of Antigravity paused by Owner.
 - 2026-11-28: Added TASK-P2-10 spec (reconciliation + admin). Owner relays tasks manually again.
 - 2026-11-28: P2-10 merged (PR #51); staging reconciliation ok. Added TASK-P2-11 spec (8 mandatory failure scenarios, supplier reject, fault injection).
+- 2026-11-28: P2-11 merged (PR #53). Phase 2 gate review written (reports/PHASE-2-GATE.md); recommends a release-readiness track before Phase 3.
